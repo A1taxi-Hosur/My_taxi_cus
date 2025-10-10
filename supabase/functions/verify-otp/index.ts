@@ -46,6 +46,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (otpError || !otpRecord) {
+      console.error('OTP verification failed:', otpError);
       return new Response(
         JSON.stringify({ error: 'Invalid or expired OTP' }),
         {
@@ -70,9 +71,11 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     let customerId: string;
+    let userId: string | null = null;
 
     if (existingCustomer) {
       customerId = existingCustomer.id.toString();
+      userId = existingCustomer.user_id;
 
       await supabase
         .from('Customers')
@@ -106,110 +109,71 @@ Deno.serve(async (req: Request) => {
       }
 
       customerId = newCustomer.id.toString();
+      userId = newCustomer.user_id;
     }
 
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      phone: phoneNumber,
-      phone_confirm: true,
-      user_metadata: {
-        full_name: otpRecord.name,
-        phone_number: phoneNumber,
-        customer_id: customerId,
-      },
-    });
+    let authUser;
 
-    if (authError) {
-      if (authError.message.includes('User already registered')) {
-        const { data: { user }, error: getUserError } = await supabase.auth.admin.listUsers();
+    if (userId) {
+      const { data: { user }, error: getUserError } = await supabase.auth.admin.getUserById(userId);
+      if (!getUserError && user) {
+        authUser = user;
+      }
+    }
 
-        if (getUserError) {
-          return new Response(
-            JSON.stringify({ error: 'Authentication error' }),
-            {
-              status: 500,
-              headers: {
-                'Content-Type': 'application/json',
-                ...corsHeaders,
-              },
-            }
-          );
-        }
+    if (!authUser) {
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        phone: phoneNumber,
+        phone_confirm: true,
+        user_metadata: {
+          full_name: otpRecord.name,
+          phone_number: phoneNumber,
+          customer_id: customerId,
+        },
+      });
 
-        const existingUser = user?.find((u: any) => u.phone === phoneNumber);
-
-        if (existingUser) {
-          const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
-            type: 'magiclink',
-            email: existingUser.email || `${phoneNumber.replace(/\+/g, '')}@phone.local`,
-            options: {
-              redirectTo: `${supabaseUrl}/auth/v1/verify`,
-            }
-          });
-
-          if (sessionError || !sessionData) {
-            return new Response(
-              JSON.stringify({ error: 'Failed to create session' }),
-              {
-                status: 500,
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...corsHeaders,
-                },
-              }
-            );
+      if (authError) {
+        console.error('Auth error:', authError);
+        return new Response(
+          JSON.stringify({ error: 'Authentication failed: ' + authError.message }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders,
+            },
           }
-
-          return new Response(
-            JSON.stringify({
-              success: true,
-              customerId,
-              sessionUrl: sessionData.properties.action_link
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                ...corsHeaders,
-              },
-            }
-          );
-        }
+        );
       }
 
-      console.error('Auth error:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Authentication failed' }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
-    }
+      if (!authData || !authData.user) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to create user session' }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders,
+            },
+          }
+        );
+      }
 
-    if (!authData || !authData.user) {
-      return new Response(
-        JSON.stringify({ error: 'Failed to create user session' }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
+      authUser = authData.user;
+
+      await supabase
+        .from('Customers')
+        .update({ user_id: authUser.id })
+        .eq('id', customerId);
     }
 
     const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
       type: 'magiclink',
-      email: authData.user.email || `${phoneNumber.replace(/\+/g, '')}@phone.local`,
-      options: {
-        redirectTo: `${supabaseUrl}/auth/v1/verify`,
-      }
+      email: authUser.email || `${phoneNumber.replace(/\+/g, '')}@phone.local`,
     });
 
     if (sessionError || !sessionData) {
+      console.error('Session error:', sessionError);
       return new Response(
         JSON.stringify({ error: 'Failed to create session' }),
         {
