@@ -65,11 +65,54 @@ Deno.serve(async (req: Request) => {
     console.log(`Name: ${name}`);
     console.log(`Expires at: ${expiresAt.toISOString()}`);
 
+    let smsSent = false;
+    let smsError = null;
+
+    try {
+      const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+      const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+      const twilioPhoneNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
+
+      if (twilioAccountSid && twilioAuthToken && twilioPhoneNumber) {
+        const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
+        const twilioAuth = btoa(`${twilioAccountSid}:${twilioAuthToken}`);
+
+        const twilioResponse = await fetch(twilioUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${twilioAuth}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            To: phoneNumber,
+            From: twilioPhoneNumber,
+            Body: `Your A1 Taxi verification code is: ${otpCode}. Valid for 10 minutes.`,
+          }),
+        });
+
+        if (twilioResponse.ok) {
+          smsSent = true;
+          console.log('✅ SMS sent via Twilio');
+        } else {
+          const errorData = await twilioResponse.json();
+          console.error('❌ Twilio error:', errorData);
+          smsError = errorData.message;
+        }
+      } else {
+        console.log('⚠️ Twilio credentials not configured');
+      }
+    } catch (err) {
+      console.error('❌ SMS sending failed:', err);
+      smsError = err.message;
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'OTP sent successfully',
+        message: smsSent ? 'OTP sent successfully via SMS' : 'OTP generated successfully',
         devOtp: otpCode,
+        smsSent,
+        smsError: !smsSent ? smsError : undefined,
       }),
       {
         headers: {

@@ -47,28 +47,43 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
-    const { error, otp } = await sendOTP(formattedPhone, name.trim());
+    try {
+      const result = await sendOTP(formattedPhone, name.trim());
 
-    if (error) {
-      Alert.alert('Error', error.message);
+      if (result.error) {
+        Alert.alert('Error', result.error.message);
+        setLoading(false);
+        return;
+      }
+
       setLoading(false);
-    } else {
-      setLoading(false);
-      Alert.alert(
-        'OTP Sent',
-        `Your OTP code is: ${otp}\n\n(In production, this would be sent via SMS)`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              router.push({
-                pathname: '/auth/verify-otp',
-                params: { phoneNumber: formattedPhone, name: name.trim() }
-              });
+
+      if (result.otp) {
+        Alert.alert(
+          'OTP Sent',
+          `Your OTP code is: ${result.otp}\n\n${result.otp ? '(Check your phone for SMS or use code above)' : '(In production, this would be sent via SMS)'}`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                router.push({
+                  pathname: '/auth/verify-otp',
+                  params: { phoneNumber: formattedPhone, name: name.trim() }
+                });
+              }
             }
-          }
-        ]
-      );
+          ]
+        );
+      } else {
+        router.push({
+          pathname: '/auth/verify-otp',
+          params: { phoneNumber: formattedPhone, name: name.trim() }
+        });
+      }
+    } catch (err) {
+      console.error('Send OTP error:', err);
+      Alert.alert('Error', 'Failed to send OTP. Please try again.');
+      setLoading(false);
     }
   };
 
