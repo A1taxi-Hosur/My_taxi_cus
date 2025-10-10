@@ -69,13 +69,27 @@ Deno.serve(async (req: Request) => {
     let smsError = null;
 
     try {
+      console.log('📲 ===== TWILIO SMS SENDING STARTING =====');
       const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
       const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
       const twilioPhoneNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
 
+      console.log('📲 Twilio Account SID exists:', !!twilioAccountSid);
+      console.log('📲 Twilio Auth Token exists:', !!twilioAuthToken);
+      console.log('📲 Twilio Phone Number exists:', !!twilioPhoneNumber);
+      console.log('📲 Twilio Phone Number:', twilioPhoneNumber);
+
       if (twilioAccountSid && twilioAuthToken && twilioPhoneNumber) {
+        console.log('📲 All Twilio credentials found, sending SMS...');
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
         const twilioAuth = btoa(`${twilioAccountSid}:${twilioAuthToken}`);
+
+        console.log('📲 Twilio URL:', twilioUrl);
+        console.log('📲 Sending to:', phoneNumber);
+        console.log('📲 From:', twilioPhoneNumber);
+
+        const smsBody = `Your A1 Taxi verification code is: ${otpCode}. Valid for 10 minutes.`;
+        console.log('📲 Message body:', smsBody);
 
         const twilioResponse = await fetch(twilioUrl, {
           method: 'POST',
@@ -86,23 +100,36 @@ Deno.serve(async (req: Request) => {
           body: new URLSearchParams({
             To: phoneNumber,
             From: twilioPhoneNumber,
-            Body: `Your A1 Taxi verification code is: ${otpCode}. Valid for 10 minutes.`,
+            Body: smsBody,
           }),
         });
 
+        console.log('📲 Twilio response status:', twilioResponse.status);
+        console.log('📲 Twilio response ok:', twilioResponse.ok);
+
         if (twilioResponse.ok) {
+          const twilioData = await twilioResponse.json();
           smsSent = true;
-          console.log('✅ SMS sent via Twilio');
+          console.log('✅ SMS sent via Twilio successfully!');
+          console.log('📲 Twilio message SID:', twilioData.sid);
         } else {
           const errorData = await twilioResponse.json();
-          console.error('❌ Twilio error:', errorData);
-          smsError = errorData.message;
+          console.error('❌ Twilio API error response:', JSON.stringify(errorData, null, 2));
+          smsError = errorData.message || 'Twilio API error';
         }
       } else {
-        console.log('⚠️ Twilio credentials not configured');
+        const missing = [];
+        if (!twilioAccountSid) missing.push('TWILIO_ACCOUNT_SID');
+        if (!twilioAuthToken) missing.push('TWILIO_AUTH_TOKEN');
+        if (!twilioPhoneNumber) missing.push('TWILIO_PHONE_NUMBER');
+        console.log('⚠️ Twilio credentials not configured. Missing:', missing.join(', '));
+        smsError = `Missing Twilio env vars: ${missing.join(', ')}`;
       }
+      console.log('📲 ===== TWILIO SMS SENDING COMPLETE =====');
     } catch (err) {
-      console.error('❌ SMS sending failed:', err);
+      console.error('❌ SMS sending failed with exception:', err);
+      console.error('❌ Error message:', err.message);
+      console.error('❌ Error stack:', err.stack);
       smsError = err.message;
     }
 

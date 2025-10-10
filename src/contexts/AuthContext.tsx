@@ -172,10 +172,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const sendOTP = async (phoneNumber: string, name: string) => {
     try {
+      console.log('📱 ===== SEND OTP STARTING =====');
+      console.log('📱 Phone Number:', phoneNumber);
+      console.log('📱 Name:', name);
+
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-otp`, {
+      console.log('📱 Supabase URL:', supabaseUrl);
+      console.log('📱 Anon Key exists:', !!supabaseKey);
+
+      const requestUrl = `${supabaseUrl}/functions/v1/send-otp`;
+      console.log('📱 Request URL:', requestUrl);
+
+      console.log('📱 Making fetch request...');
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -187,15 +198,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }),
       });
 
+      console.log('📱 Response status:', response.status);
+      console.log('📱 Response ok:', response.ok);
+
       const data = await response.json();
+      console.log('📱 Response data:', JSON.stringify(data, null, 2));
 
       if (!response.ok) {
+        console.error('📱 ❌ OTP send failed:', data.error);
         return { error: new Error(data.error || 'Failed to send OTP') };
       }
 
-      return { error: null, otp: data.devOtp };
+      console.log('📱 ✅ OTP sent successfully!');
+      console.log('📱 Dev OTP:', data.devOtp);
+      console.log('📱 SMS Sent:', data.smsSent);
+      console.log('📱 SMS Error:', data.smsError);
+      console.log('📱 ===== SEND OTP COMPLETE =====');
+
+      return { error: null, otp: data.devOtp, smsSent: data.smsSent, smsError: data.smsError };
     } catch (error) {
-      console.error('Error sending OTP:', error);
+      console.error('📱 ❌ Error sending OTP:', error);
+      console.error('📱 Error details:', error);
       return { error: error as Error };
     }
   };

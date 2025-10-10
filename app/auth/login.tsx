@@ -29,62 +29,89 @@ export default function LoginScreen() {
   };
 
   const handleSendOTP = async () => {
+    console.log('🚀 ===== HANDLE SEND OTP CLICKED =====');
+
     if (!name.trim()) {
+      console.log('❌ Name is empty');
       Alert.alert('Error', 'Please enter your name');
       return;
     }
 
     if (!phoneNumber.trim()) {
+      console.log('❌ Phone number is empty');
       Alert.alert('Error', 'Please enter your phone number');
       return;
     }
 
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+    console.log('📱 Formatted phone:', formattedPhone);
 
     if (formattedPhone.length < 10) {
+      console.log('❌ Phone number too short');
       Alert.alert('Error', 'Please enter a valid phone number');
       return;
     }
 
+    console.log('⏳ Setting loading true...');
     setLoading(true);
+
     try {
+      console.log('📞 Calling sendOTP...');
       const result = await sendOTP(formattedPhone, name.trim());
+      console.log('📞 sendOTP returned:', result);
 
       if (result.error) {
+        console.error('❌ Result has error:', result.error);
         Alert.alert('Error', result.error.message);
         setLoading(false);
         return;
       }
 
+      console.log('✅ No error in result');
+      console.log('📱 OTP received:', result.otp);
+      console.log('📱 SMS sent status:', result.smsSent);
+      console.log('📱 SMS error:', result.smsError);
+
       setLoading(false);
 
-      if (result.otp) {
-        Alert.alert(
-          'OTP Sent',
-          `Your OTP code is: ${result.otp}\n\n${result.otp ? '(Check your phone for SMS or use code above)' : '(In production, this would be sent via SMS)'}`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                router.push({
-                  pathname: '/auth/verify-otp',
-                  params: { phoneNumber: formattedPhone, name: name.trim() }
-                });
-              }
-            }
-          ]
-        );
+      let message = `Your OTP code is: ${result.otp}\n\n`;
+      if (result.smsSent) {
+        message += '✅ SMS sent successfully! Check your phone.';
+      } else if (result.smsError) {
+        message += `⚠️ SMS failed: ${result.smsError}\nPlease use the code above.`;
       } else {
-        router.push({
-          pathname: '/auth/verify-otp',
-          params: { phoneNumber: formattedPhone, name: name.trim() }
-        });
+        message += '⚠️ SMS not configured. Please use the code above.';
       }
+
+      console.log('💬 Showing alert with message:', message);
+      console.log('🧭 Will navigate to verify-otp after alert');
+
+      Alert.alert(
+        'OTP Sent',
+        message,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              console.log('🧭 Alert dismissed, navigating to verify-otp...');
+              console.log('🧭 Target params:', { phoneNumber: formattedPhone, name: name.trim() });
+              router.push({
+                pathname: '/auth/verify-otp',
+                params: { phoneNumber: formattedPhone, name: name.trim() }
+              });
+              console.log('🧭 Navigation triggered');
+            }
+          }
+        ]
+      );
+      console.log('💬 Alert displayed');
     } catch (err) {
-      console.error('Send OTP error:', err);
+      console.error('💥 Exception caught:', err);
+      console.error('💥 Error stack:', err.stack);
       Alert.alert('Error', 'Failed to send OTP. Please try again.');
       setLoading(false);
     }
+    console.log('🚀 ===== HANDLE SEND OTP END =====');
   };
 
   return (
