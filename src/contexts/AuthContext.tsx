@@ -246,29 +246,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error(data.error || 'Failed to verify OTP') };
       }
 
-      if (data.accessToken && data.refreshToken) {
-        console.log('🔑 Tokens received from server');
-        console.log('🔑 Access token exists:', !!data.accessToken);
-        console.log('🔑 Refresh token exists:', !!data.refreshToken);
-        console.log('🔑 User data:', data.user);
+      if (data.success && data.email && data.password) {
+        console.log('✅ User verified successfully!');
+        console.log('✅ User ID:', data.userId);
+        console.log('✅ Customer ID:', data.customerId);
+        console.log('✅ Email:', data.email);
 
-        console.log('🔐 Setting session with tokens...');
-        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-          access_token: data.accessToken,
-          refresh_token: data.refreshToken,
+        console.log('🔐 Signing in with credentials...');
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
         });
 
-        if (sessionError) {
-          console.error('❌ Session error:', sessionError);
-          return { error: sessionError };
+        if (signInError) {
+          console.error('❌ Sign in error:', signInError);
+          return { error: signInError };
         }
 
-        console.log('✅ Session set successfully!');
-        console.log('✅ User authenticated:', sessionData.user?.id);
-        console.log('✅ Customer ID:', data.customerId);
+        console.log('✅ Signed in successfully!');
+        console.log('✅ Session created:', !!signInData.session);
+        console.log('✅ User:', signInData.user?.id);
       } else {
-        console.error('❌ Missing tokens in response');
-        return { error: new Error('Authentication failed: No tokens received') };
+        console.error('❌ Invalid response from server');
+        return { error: new Error('Authentication failed: Invalid response') };
       }
 
       console.log('✅ OTP verification complete');

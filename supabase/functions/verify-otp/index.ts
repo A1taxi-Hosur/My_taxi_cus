@@ -142,11 +142,13 @@ Deno.serve(async (req: Request) => {
       console.log('🔐 Customer ID:', customerId);
 
       const dummyEmail = `${phoneNumber.replace(/\+/g, '').replace(/\s/g, '')}@phone.a1taxi.local`;
+      const defaultPassword = `A1Taxi${phoneNumber.replace(/\D/g, '')}!`;
       console.log('🔐 Using dummy email:', dummyEmail);
 
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         phone: phoneNumber,
         email: dummyEmail,
+        password: defaultPassword,
         email_confirm: true,
         phone_confirm: true,
         user_metadata: {
@@ -204,59 +206,25 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log('🔐 Generating auth tokens...');
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: authUser.email || `${phoneNumber.replace(/\+/g, '')}@phone.a1taxi.local`,
-    });
+    console.log('✅ Customer and auth user setup complete');
+    console.log('🔐 Returning success with credentials');
 
-    if (linkError || !linkData) {
-      console.error('❌ Link generation error:', linkError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to create session' }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
-    }
-
-    console.log('✅ Auth link generated');
-    console.log('🔐 Extracting tokens from magic link...');
-
-    const actionLink = linkData.properties.action_link;
-    const url = new URL(actionLink);
-    const accessToken = url.searchParams.get('access_token');
-    const refreshToken = url.searchParams.get('refresh_token');
-
-    if (!accessToken || !refreshToken) {
-      console.error('❌ Tokens not found in magic link');
-      return new Response(
-        JSON.stringify({ error: 'Failed to extract session tokens' }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
-    }
-
-    console.log('✅ Tokens extracted successfully');
-    console.log('🔐 Access token length:', accessToken.length);
-    console.log('🔐 Refresh token length:', refreshToken.length);
+    const dummyEmail = `${phoneNumber.replace(/\+/g, '').replace(/\s/g, '')}@phone.a1taxi.local`;
+    const defaultPassword = `A1Taxi${phoneNumber.replace(/\D/g, '')}!`;
 
     return new Response(
       JSON.stringify({
         success: true,
         customerId,
-        accessToken,
-        refreshToken,
-        user: authUser
+        userId: authUser.id,
+        email: dummyEmail,
+        password: defaultPassword,
+        user: {
+          id: authUser.id,
+          email: authUser.email,
+          phone: authUser.phone,
+          user_metadata: authUser.user_metadata
+        }
       }),
       {
         headers: {
