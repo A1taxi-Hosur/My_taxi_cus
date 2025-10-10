@@ -204,14 +204,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log('🔐 Creating session tokens...');
-    const { data: sessionData, error: sessionError } = await supabase.auth.admin.createSession({
-      user_id: authUser.id
+    console.log('🔐 Generating auth tokens...');
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: authUser.email || `${phoneNumber.replace(/\+/g, '')}@phone.a1taxi.local`,
     });
 
-    if (sessionError || !sessionData) {
-      console.error('❌ Session error:', sessionError);
-      console.error('❌ Session error details:', JSON.stringify(sessionError, null, 2));
+    if (linkError || !linkData) {
+      console.error('❌ Link generation error:', linkError);
       return new Response(
         JSON.stringify({ error: 'Failed to create session' }),
         {
@@ -224,17 +224,39 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('✅ Session created successfully');
-    console.log('🔐 Access token length:', sessionData.access_token?.length);
-    console.log('🔐 Refresh token length:', sessionData.refresh_token?.length);
+    console.log('✅ Auth link generated');
+    console.log('🔐 Extracting tokens from magic link...');
+
+    const actionLink = linkData.properties.action_link;
+    const url = new URL(actionLink);
+    const accessToken = url.searchParams.get('access_token');
+    const refreshToken = url.searchParams.get('refresh_token');
+
+    if (!accessToken || !refreshToken) {
+      console.error('❌ Tokens not found in magic link');
+      return new Response(
+        JSON.stringify({ error: 'Failed to extract session tokens' }),
+        {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    console.log('✅ Tokens extracted successfully');
+    console.log('🔐 Access token length:', accessToken.length);
+    console.log('🔐 Refresh token length:', refreshToken.length);
 
     return new Response(
       JSON.stringify({
         success: true,
         customerId,
-        accessToken: sessionData.access_token,
-        refreshToken: sessionData.refresh_token,
-        user: sessionData.user
+        accessToken,
+        refreshToken,
+        user: authUser
       }),
       {
         headers: {
