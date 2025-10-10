@@ -48,6 +48,7 @@ interface FareBreakdown {
   deadheadDistance: number;
 }
 
+// Hard-coded Hosur Bus Stand coordinates
 const HOSUR_BUS_STAND = {
   latitude: 12.7402,
   longitude: 77.8240
@@ -79,6 +80,7 @@ Deno.serve(async (req: Request) => {
         booking_type: requestData.booking_type || 'regular'
       });
 
+      // Get fare configuration
       const fareConfig = await getFareConfig(supabase, requestData.vehicle_type, requestData.booking_type || 'regular');
       if (!fareConfig) {
         throw new Error(`No fare configuration found for ${requestData.vehicle_type}`);
@@ -91,83 +93,22 @@ Deno.serve(async (req: Request) => {
         surge_multiplier: fareConfig.surge_multiplier
       });
 
-      let distance: number;
-      let duration: number;
+      // Calculate base fare components
+      let distance = requestData.distance_km || calculateDistance(
+        requestData.pickup_latitude,
+        requestData.pickup_longitude,
+        requestData.destination_latitude,
+        requestData.destination_longitude
+      );
+      
+      let duration = requestData.duration_minutes || (distance / 30) * 60;
 
-      if (requestData.distance_km && requestData.duration_minutes) {
-        distance = requestData.distance_km;
-        duration = requestData.duration_minutes;
-        console.log('📏 [FARE-CALC] Using provided distance and duration');
-      } else {
-        console.log('🗺️ [FARE-CALC] ===== FETCHING ROAD DISTANCE FROM GOOGLE MAPS =====');
-        const googleMapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
+      console.log('📏 [FARE-CALC] Route details:', {
+        distance: distance.toFixed(2) + 'km',
+        duration: Math.round(duration) + 'min'
+      });
 
-        if (!googleMapsApiKey) {
-          console.warn('⚠️ [FARE-CALC] Google Maps API key not found, using straight-line distance');
-          distance = calculateDistance(
-            requestData.pickup_latitude,
-            requestData.pickup_longitude,
-            requestData.destination_latitude,
-            requestData.destination_longitude
-          );
-          duration = (distance / 30) * 60;
-        } else {
-          try {
-            const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${requestData.pickup_latitude},${requestData.pickup_longitude}&destination=${requestData.destination_latitude},${requestData.destination_longitude}&mode=driving&key=${googleMapsApiKey}`;
-
-            console.log('🗺️ [FARE-CALC] Calling Google Directions API...');
-            const directionsResponse = await fetch(directionsUrl);
-            const directionsData = await directionsResponse.json();
-
-            if (directionsData.status === 'OK' && directionsData.routes && directionsData.routes.length > 0) {
-              const route = directionsData.routes[0];
-              const leg = route.legs[0];
-
-              distance = leg.distance.value / 1000;
-              duration = leg.duration.value / 60;
-
-              console.log('✅ [FARE-CALC] ===== GOOGLE MAPS SUCCESS - USING ROAD DISTANCE =====');
-              console.log('✅ [FARE-CALC] Road distance:', {
-                text: leg.distance.text,
-                kilometers: distance.toFixed(2) + 'km',
-                meters: leg.distance.value,
-                source: 'Google Directions API (ACTUAL ROAD DISTANCE)'
-              });
-              console.log('✅ [FARE-CALC] Travel time:', {
-                text: leg.duration.text,
-                minutes: duration.toFixed(1) + ' min',
-                seconds: leg.duration.value,
-                source: 'Google Directions API (ACTUAL TRAVEL TIME)'
-              });
-            } else {
-              console.warn('⚠️ [FARE-CALC] Google Directions API failed:', directionsData.status);
-              console.warn('⚠️ [FARE-CALC] Falling back to straight-line distance');
-              distance = calculateDistance(
-                requestData.pickup_latitude,
-                requestData.pickup_longitude,
-                requestData.destination_latitude,
-                requestData.destination_longitude
-              );
-              duration = (distance / 30) * 60;
-            }
-          } catch (error) {
-            console.error('❌ [FARE-CALC] Error calling Google Directions API:', error);
-            console.warn('⚠️ [FARE-CALC] Falling back to straight-line distance');
-            distance = calculateDistance(
-              requestData.pickup_latitude,
-              requestData.pickup_longitude,
-              requestData.destination_latitude,
-              requestData.destination_longitude
-            );
-            duration = (distance / 30) * 60;
-          }
-        }
-      }
-
-      console.log('📏 [FARE-CALC] ===== FINAL ROUTE DETAILS =====');
-      console.log('📏 [FARE-CALC] Distance for fare calculation:', distance.toFixed(2) + 'km');
-      console.log('📏 [FARE-CALC] Duration for fare calculation:', Math.round(duration) + ' min');
-
+      // Calculate base fare components using 4km base logic
       const baseFare = fareConfig.base_fare;
       
       let distanceFare = 0;
@@ -190,6 +131,7 @@ Deno.serve(async (req: Request) => {
         subtotal
       });
 
+      // Initialize deadhead variables
       let deadheadCharge = 0;
       let deadheadDistance = 0;
       let deadheadInfo = {
@@ -200,6 +142,7 @@ Deno.serve(async (req: Request) => {
         zoneStatus: 'Unknown'
       };
 
+      // Calculate deadhead charge for regular rides only
       if ((requestData.booking_type || 'regular') === 'regular') {
         console.log('🎯 [FARE-CALC] ===== STARTING ZONE ANALYSIS FOR DEADHEAD =====');
         
@@ -211,6 +154,7 @@ Deno.serve(async (req: Request) => {
         console.log('🎯 [FARE-CALC] Destination point:', destinationPoint);
         console.log('🎯 [FARE-CALC] Hosur Bus Stand (hard-coded):', HOSUR_BUS_STAND);
 
+        // Get zones from database
         const zones = await getZonesFromDatabase(supabase);
         
         if (zones.innerRing && zones.outerRing) {
@@ -226,6 +170,7 @@ Deno.serve(async (req: Request) => {
             radius: zones.outerRing.radius_km + 'km'
           });
 
+          // Calculate distances to zone centers
           const distanceToInnerCenter = calculateDistance(
             destinationPoint.latitude,
             destinationPoint.longitude,
@@ -246,6 +191,7 @@ Deno.serve(async (req: Request) => {
           console.log('🎯 [FARE-CALC] Inner Ring radius:', zones.innerRing.radius_km + 'km');
           console.log('🎯 [FARE-CALC] Outer Ring radius:', zones.outerRing.radius_km + 'km');
 
+          // Zone classification logic
           const isWithinInnerRing = distanceToInnerCenter <= zones.innerRing.radius_km;
           const isWithinOuterRing = distanceToOuterCenter <= zones.outerRing.radius_km;
 
@@ -253,6 +199,41 @@ Deno.serve(async (req: Request) => {
           console.log('🎯 [FARE-CALC] Is within Inner Ring?', isWithinInnerRing, `(${distanceToInnerCenter.toFixed(4)}km <= ${zones.innerRing.radius_km}km)`);
           console.log('🎯 [FARE-CALC] Is within Outer Ring?', isWithinOuterRing, `(${distanceToOuterCenter.toFixed(4)}km <= ${zones.outerRing.radius_km}km)`);
 
+          console.log('🎯 [FARE-CALC] ===== ZONE CLASSIFICATION LOGIC =====');
+          console.log('🎯 [FARE-CALC] Zone boundary checks:', {
+            isWithinInnerRing: isWithinInnerRing,
+            isWithinInnerRingCheck: `${distanceToInnerCenter.toFixed(4)}km <= ${zones.innerRing.radius_km}km = ${isWithinInnerRing}`,
+            isWithinOuterRing: isWithinOuterRing,
+            isWithinOuterRingCheck: `${distanceToOuterCenter.toFixed(4)}km <= ${zones.outerRing.radius_km}km = ${isWithinOuterRing}`,
+            deadheadCondition: `!${isWithinInnerRing} && ${isWithinOuterRing} = ${!isWithinInnerRing && isWithinOuterRing}`,
+            BAGALUR_SPECIFIC_DEBUG: {
+              destination: destinationPoint,
+              innerRingCenter: { lat: zones.innerRing.center_latitude, lng: zones.innerRing.center_longitude },
+              outerRingCenter: { lat: zones.outerRing.center_latitude, lng: zones.outerRing.center_longitude },
+              innerRingRadius: zones.innerRing.radius_km,
+              outerRingRadius: zones.outerRing.radius_km,
+              distanceToInner: distanceToInnerCenter.toFixed(6),
+              distanceToOuter: distanceToOuterCenter.toFixed(6),
+              isDestinationBagalur: destinationPoint.latitude > 13.0 && destinationPoint.latitude < 13.2,
+              expectedForBagalur: 'Should be OUTSIDE Inner Ring but INSIDE Outer Ring'
+            }
+          });
+          
+          console.log('🎯 [FARE-CALC] Zone classification result:', {
+            zoneStatus: isWithinInnerRing ? 'Within Inner Ring (NO DEADHEAD)' :
+                       !isWithinInnerRing && isWithinOuterRing ? 'Between Inner and Outer Ring (DEADHEAD APPLIES)' :
+                       'Outside Outer Ring (OUTSTATION - NO DEADHEAD)',
+            FINAL_DECISION: !isWithinInnerRing && isWithinOuterRing ? 'DEADHEAD_APPLIES' : 'NO_DEADHEAD',
+            BAGALUR_CHECK: {
+              shouldGetDeadhead: !isWithinInnerRing && isWithinOuterRing,
+              reasoning: !isWithinInnerRing && isWithinOuterRing ? 
+                'Bagalur is outside Inner Ring but inside Outer Ring - DEADHEAD APPLIES' :
+                isWithinInnerRing ? 'Bagalur is within Inner Ring - NO DEADHEAD' :
+                'Bagalur is outside Outer Ring - NO DEADHEAD (outstation)'
+            }
+          });
+
+          // Apply deadhead charge only if destination is between inner and outer ring
           const shouldApplyDeadhead = !isWithinInnerRing && isWithinOuterRing;
           
           console.log('🎯 [FARE-CALC] ===== DEADHEAD DECISION POINT =====');
@@ -261,12 +242,17 @@ Deno.serve(async (req: Request) => {
             isWithinOuterRing,
             notWithinInner: !isWithinInnerRing,
             withinOuter: isWithinOuterRing,
-            shouldApplyDeadhead
+            shouldApplyDeadhead,
+            logicCheck: `!${isWithinInnerRing} && ${isWithinOuterRing} = ${shouldApplyDeadhead}`,
+            BAGALUR_EXPECTED: 'TRUE for deadhead charges'
           });
           
           if (shouldApplyDeadhead) {
             console.log('🎯 [FARE-CALC] ===== DEADHEAD CHARGE APPLIES =====');
+            console.log('🎯 [FARE-CALC] ✅ DEADHEAD LOGIC TRIGGERED - Destination is between Inner and Outer Ring');
+            console.log('🎯 [FARE-CALC] This should happen for Bagalur!');
             
+            // Calculate deadhead distance from drop-off to Hosur Bus Stand
             deadheadDistance = calculateDistance(
               destinationPoint.latitude,
               destinationPoint.longitude,
@@ -274,16 +260,19 @@ Deno.serve(async (req: Request) => {
               HOSUR_BUS_STAND.longitude
             );
             
+            // Apply deadhead formula: (distance to Hosur Bus Stand / 2) * per km rate
             deadheadCharge = (deadheadDistance / 2) * fareConfig.per_km_rate;
             
             console.log('🎯 [FARE-CALC] ===== DEADHEAD CALCULATION COMPLETE =====');
-            console.log('🎯 [FARE-CALC] Deadhead details:', {
+            console.log('🎯 [FARE-CALC] ✅ DEADHEAD CALCULATION FOR BAGALUR:', {
               dropOffLocation: destinationPoint,
               hosurBusStand: HOSUR_BUS_STAND,
               distanceToHosurBusStand: deadheadDistance.toFixed(4) + 'km',
               perKmRate: '₹' + fareConfig.per_km_rate + '/km',
               calculation: `(${deadheadDistance.toFixed(2)}km ÷ 2) × ₹${fareConfig.per_km_rate} = ₹${deadheadCharge.toFixed(2)}`,
-              deadheadCharge: '₹' + deadheadCharge.toFixed(2)
+              formula: 'Distance to Hosur Bus Stand ÷ 2 × Per KM Rate',
+              deadheadCharge: '₹' + deadheadCharge.toFixed(2),
+              BAGALUR_SUCCESS: 'Deadhead charge successfully calculated for Bagalur!'
             });
             
             deadheadInfo = {
@@ -295,9 +284,18 @@ Deno.serve(async (req: Request) => {
             };
           } else {
             console.log('🎯 [FARE-CALC] ===== NO DEADHEAD CHARGE =====');
-            console.log('🎯 [FARE-CALC] Reason:', {
+            console.log('🎯 [FARE-CALC] ❌ NO DEADHEAD CHARGE - DEBUGGING WHY:', {
               reason: isWithinInnerRing ? 'Destination within Inner Ring' : 'Destination outside Outer Ring (should be outstation)',
-              zoneStatus: isWithinInnerRing ? 'Within Inner Ring' : 'Outside Outer Ring'
+              zoneStatus: isWithinInnerRing ? 'Within Inner Ring' : 'Outside Outer Ring',
+              BAGALUR_PROBLEM: {
+                destination: destinationPoint,
+                isWithinInnerRing,
+                isWithinOuterRing,
+                shouldApplyDeadhead: !isWithinInnerRing && isWithinOuterRing,
+                actualCondition: shouldApplyDeadhead,
+                expectedForBagalur: 'Should be FALSE for Inner Ring and TRUE for Outer Ring',
+                troubleshooting: 'Check if zone radii are correct in database'
+              }
             });
             
             deadheadInfo = {
@@ -310,6 +308,8 @@ Deno.serve(async (req: Request) => {
           }
         } else {
           console.warn('⚠️ [FARE-CALC] ===== ZONES NOT FOUND =====');
+          console.warn('⚠️ [FARE-CALC] Inner Ring found:', !!zones.innerRing);
+          console.warn('⚠️ [FARE-CALC] Outer Ring found:', !!zones.outerRing);
           console.warn('⚠️ [FARE-CALC] No deadhead charge applied - zones missing from database');
           
           deadheadInfo = {
@@ -331,6 +331,7 @@ Deno.serve(async (req: Request) => {
         };
       }
 
+      // Calculate final total fare
       const totalFare = subtotal + deadheadCharge;
       
       console.log('💰 [FARE-CALC] ===== FINAL FARE BREAKDOWN =====');
@@ -340,7 +341,8 @@ Deno.serve(async (req: Request) => {
         surgeFare: '₹' + surgeFare.toFixed(2),
         subtotal: '₹' + subtotal.toFixed(2),
         deadheadCharge: '₹' + deadheadCharge.toFixed(2),
-        totalFare: '₹' + totalFare.toFixed(2)
+        totalFare: '₹' + totalFare.toFixed(2),
+        calculation: `₹${baseFare} + ₹${distanceFare} + ₹${surgeFare} + ₹${deadheadCharge} = ₹${totalFare}`
       });
 
       const fareBreakdown: FareBreakdown = {
@@ -403,6 +405,7 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+// Get zones from database
 async function getZonesFromDatabase(supabase: any): Promise<{ innerRing: Zone | null; outerRing: Zone | null }> {
   try {
     console.log('🔍 [FARE-CALC] ===== FETCHING ZONES FROM DATABASE =====');
@@ -428,6 +431,25 @@ async function getZonesFromDatabase(supabase: any): Promise<{ innerRing: Zone | 
 
     if (!zones || zones.length === 0) {
       console.warn('⚠️ [FARE-CALC] No zones found in database');
+      
+      // Try to fetch all zones to see what's available
+      const { data: allZones, error: allZonesError } = await supabase
+        .from('zones')
+        .select('id, name, is_active, center_latitude, center_longitude, radius_km')
+        .limit(10);
+      
+      console.log('🔍 [FARE-CALC] All zones in database:', {
+        hasError: !!allZonesError,
+        totalZones: allZones?.length || 0,
+        allZonesList: allZones?.map(z => ({
+          id: z.id,
+          name: z.name,
+          is_active: z.is_active,
+          center: { lat: z.center_latitude, lng: z.center_longitude },
+          radius: z.radius_km
+        })) || []
+      });
+      
       return { innerRing: null, outerRing: null };
     }
 
@@ -436,7 +458,19 @@ async function getZonesFromDatabase(supabase: any): Promise<{ innerRing: Zone | 
 
     console.log('✅ [FARE-CALC] Zones extracted:', {
       innerRingFound: !!innerRing,
-      outerRingFound: !!outerRing
+      outerRingFound: !!outerRing,
+      innerRingDetails: innerRing ? {
+        id: innerRing.id,
+        name: innerRing.name,
+        center: { lat: innerRing.center_latitude, lng: innerRing.center_longitude },
+        radius: innerRing.radius_km
+      } : null,
+      outerRingDetails: outerRing ? {
+        id: outerRing.id,
+        name: outerRing.name,
+        center: { lat: outerRing.center_latitude, lng: outerRing.center_longitude },
+        radius: outerRing.radius_km
+      } : null
     });
 
     return { innerRing, outerRing };
@@ -446,6 +480,7 @@ async function getZonesFromDatabase(supabase: any): Promise<{ innerRing: Zone | 
   }
 }
 
+// Get fare configuration
 async function getFareConfig(supabase: any, vehicleType: string, bookingType: string): Promise<FareConfig | null> {
   try {
     console.log('💰 [FARE-CALC] Fetching fare config:', { vehicleType, bookingType });
@@ -486,8 +521,9 @@ async function getFareConfig(supabase: any, vehicleType: string, bookingType: st
   }
 }
 
+// Calculate distance using Haversine formula
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
+  const R = 6371; // Earth's radius in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   

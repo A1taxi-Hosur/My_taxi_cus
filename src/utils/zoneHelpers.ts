@@ -2,38 +2,25 @@ import { Zone } from '../services/zoneService';
 
 /**
  * Check if a point is within any of the active zones
- * Only checks against the Outer Ring zone
  */
 export function isPointInAnyActiveZone(
   coordinates: { latitude: number; longitude: number },
   zones: Zone[]
 ): boolean {
-  console.log('🔍 Checking if point is in service area:', {
+  console.log('🔍 Checking if point is in any active zone:', {
     coordinates,
-    zonesCount: zones.length,
-    zones: zones.map(z => ({ name: z.name, hasPolygon: !!z.coordinates?.coordinates }))
+    zonesCount: zones.length
   });
 
-  const outerRing = zones.find(z => z.name === 'Outer Ring');
-
-  if (!outerRing) {
-    console.warn('⚠️ Outer Ring zone not found, allowing location by default');
-    return true;
+  for (const zone of zones) {
+    if (isPointInZone(coordinates, zone)) {
+      console.log('✅ Point is within zone:', zone.name);
+      return true;
+    }
   }
 
-  if (!outerRing.coordinates || !outerRing.coordinates.coordinates) {
-    console.warn('⚠️ Outer Ring has no polygon coordinates, falling back to radius check');
-    return isPointInCircle(
-      coordinates,
-      { latitude: outerRing.center_latitude, longitude: outerRing.center_longitude },
-      outerRing.radius_km
-    );
-  }
-
-  const isInside = isPointInPolygon(coordinates, outerRing.coordinates.coordinates);
-  console.log(`🔍 Point is ${isInside ? 'INSIDE' : 'OUTSIDE'} Outer Ring polygon`);
-
-  return isInside;
+  console.log('❌ Point is not within any active zone');
+  return false;
 }
 
 /**
@@ -59,7 +46,7 @@ function isPointInZone(
 /**
  * Check if a point is within a circular zone
  */
-export function isPointInCircle(
+function isPointInCircle(
   point: { latitude: number; longitude: number },
   center: { latitude: number; longitude: number },
   radiusKm: number
@@ -87,7 +74,7 @@ export function isPointInCircle(
 /**
  * Check if a point is within a polygon zone
  */
-export function isPointInPolygon(
+function isPointInPolygon(
   point: { latitude: number; longitude: number },
   polygon: number[][]
 ): boolean {

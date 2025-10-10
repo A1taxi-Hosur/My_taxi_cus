@@ -11,7 +11,6 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Car, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -21,7 +20,7 @@ export default function VerifyOTPScreen() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const { sendOTP, setAuthenticatedUser } = useAuth();
+  const { verifyOTP, sendOTP } = useAuth();
   const router = useRouter();
   const { phoneNumber, name } = useLocalSearchParams<{ phoneNumber: string; name: string }>();
 
@@ -62,58 +61,12 @@ export default function VerifyOTPScreen() {
     }
 
     setLoading(true);
+    const { error } = await verifyOTP(phoneNumber, otpString);
 
-    try {
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/verify-otp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phoneNumber,
-          otp: otpString,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert('Error', data.error || 'Failed to verify OTP');
-        setLoading(false);
-        return;
-      }
-
-      if (data.success && data.customerId) {
-        console.log('✅ OTP verified, customer ID:', data.customerId);
-
-        await AsyncStorage.setItem('customerId', data.customerId.toString());
-        await AsyncStorage.setItem('customerName', data.user.user_metadata?.full_name || 'User');
-        await AsyncStorage.setItem('customerPhone', data.user.user_metadata?.phone_number || phoneNumber);
-        await AsyncStorage.setItem('isAuthenticated', 'true');
-
-        const userData = {
-          id: data.customerId,
-          email: `${phoneNumber}@phone.a1taxi.local`,
-          full_name: data.user.user_metadata?.full_name || 'User',
-          phone_number: data.user.user_metadata?.phone_number || phoneNumber,
-          role: 'customer',
-          customer_id: data.customerId
-        };
-
-        console.log('✅ Setting authenticated user in context...');
-        setAuthenticatedUser(userData);
-
-        console.log('✅ Customer data saved, navigating to home...');
-        setLoading(false);
-        router.replace('/(tabs)');
-      } else {
-        Alert.alert('Error', 'Verification failed');
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      Alert.alert('Error', 'An error occurred during verification');
+    if (error) {
+      Alert.alert('Error', error.message);
+      setLoading(false);
+    } else {
       setLoading(false);
     }
   };
@@ -125,24 +78,14 @@ export default function VerifyOTPScreen() {
     }
 
     setResending(true);
-    const { error, otp: newOtp } = await sendOTP(phoneNumber, name);
+    const { error } = await sendOTP(phoneNumber, name);
 
     if (error) {
       Alert.alert('Error', error.message);
     } else {
-      Alert.alert(
-        'OTP Resent',
-        `Your new OTP code is: ${newOtp}\n\n(In production, this would be sent via SMS)`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setOtp(['', '', '', '', '', '']);
-              inputRefs.current[0]?.focus();
-            }
-          }
-        ]
-      );
+      Alert.alert('Success', 'OTP has been resent to your phone');
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
     }
     setResending(false);
   };
