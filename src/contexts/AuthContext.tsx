@@ -10,6 +10,8 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: AuthError | null }>;
+  sendOTP: (phoneNumber: string, name: string) => Promise<{ error: Error | null }>;
+  verifyOTP: (phoneNumber: string, otp: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -168,6 +170,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
+  const sendOTP = async (phoneNumber: string, name: string) => {
+    try {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/notifications`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber,
+          name,
+          action: 'send-otp',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { error: new Error(data.error || 'Failed to send OTP') };
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      return { error: error as Error };
+    }
+  };
+
+  const verifyOTP = async (phoneNumber: string, otp: string) => {
+    try {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber,
+          otp,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { error: new Error(data.error || 'Failed to verify OTP') };
+      }
+
+      if (data.sessionUrl) {
+        const sessionUrl = new URL(data.sessionUrl);
+        const accessToken = sessionUrl.searchParams.get('access_token');
+        const refreshToken = sessionUrl.searchParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (sessionError) {
+            return { error: sessionError };
+          }
+        }
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      return { error: error as Error };
+    }
+  };
+
   const signOut = async () => {
     try {
       console.log('🚪 Starting sign out process...');
@@ -236,6 +310,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     signIn,
     signUp,
+    sendOTP,
+    verifyOTP,
     signOut,
   };
 
