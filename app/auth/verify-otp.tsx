@@ -21,7 +21,7 @@ export default function VerifyOTPScreen() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const { verifyOTP, sendOTP } = useAuth();
+  const { sendOTP, setAuthenticatedUser } = useAuth();
   const router = useRouter();
   const { phoneNumber, name } = useLocalSearchParams<{ phoneNumber: string; name: string }>();
 
@@ -91,6 +91,18 @@ export default function VerifyOTPScreen() {
         await AsyncStorage.setItem('customerName', data.user.user_metadata?.full_name || 'User');
         await AsyncStorage.setItem('customerPhone', data.user.user_metadata?.phone_number || phoneNumber);
         await AsyncStorage.setItem('isAuthenticated', 'true');
+
+        const userData = {
+          id: data.customerId,
+          email: `${phoneNumber}@phone.a1taxi.local`,
+          full_name: data.user.user_metadata?.full_name || 'User',
+          phone_number: data.user.user_metadata?.phone_number || phoneNumber,
+          role: 'customer',
+          customer_id: data.customerId
+        };
+
+        console.log('✅ Setting authenticated user in context...');
+        setAuthenticatedUser(userData);
 
         console.log('✅ Customer data saved, navigating to home...');
         setLoading(false);

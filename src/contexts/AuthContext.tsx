@@ -13,6 +13,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: AuthError | null }>;
   sendOTP: (phoneNumber: string, name: string) => Promise<{ error: Error | null }>;
   verifyOTP: (phoneNumber: string, otp: string) => Promise<{ error: Error | null }>;
+  setAuthenticatedUser: (userData: any) => void;
   signOut: () => Promise<void>;
 }
 
@@ -294,13 +295,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const setAuthenticatedUser = (userData: any) => {
+    console.log('✅ Setting authenticated user in context:', userData);
+    setUser(userData);
+  };
+
   const signOut = async () => {
     try {
       console.log('🚪 Starting sign out process...');
-      
-      // Clear all Supabase-related session data from storage
+
+      await AsyncStorage.removeItem('isAuthenticated');
+      await AsyncStorage.removeItem('customerId');
+      await AsyncStorage.removeItem('customerName');
+      await AsyncStorage.removeItem('customerPhone');
+
       if (Platform.OS === 'web') {
-        // Clear localStorage on web
         if (typeof localStorage !== 'undefined') {
           const keysToRemove = [];
           for (let i = 0; i < localStorage.length; i++) {
@@ -311,20 +320,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           keysToRemove.forEach(key => localStorage.removeItem(key));
         }
-      } else {
-        // For React Native, we would use AsyncStorage, but since this is web-focused
-        // we'll handle it in the Supabase signOut call
       }
-      
-      // Then sign out from Supabase
+
       const { error } = await supabase.auth.signOut();
-      
+
       if (error) {
         console.error('Supabase sign out error:', error);
-        // Even if signOut fails, clear local state to prevent stuck sessions
       }
-      
-      // Clear local state after Supabase sign out
+
       setSession(null);
       setUser(null);
       
@@ -364,6 +367,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     sendOTP,
     verifyOTP,
+    setAuthenticatedUser,
     signOut,
   };
 
