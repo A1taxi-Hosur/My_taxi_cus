@@ -9,11 +9,15 @@ export function isPointInAnyActiveZone(
 ): boolean {
   console.log('🔍 Checking if point is in any active zone:', {
     coordinates,
-    zonesCount: zones.length
+    zonesCount: zones.length,
+    zones: zones.map(z => ({ name: z.name, radius: z.radius_km }))
   });
 
   for (const zone of zones) {
-    if (isPointInZone(coordinates, zone)) {
+    const isInZone = isPointInZone(coordinates, zone);
+    console.log(`🔍 Zone "${zone.name}" check result:`, isInZone);
+
+    if (isInZone) {
       console.log('✅ Point is within zone:', zone.name);
       return true;
     }
