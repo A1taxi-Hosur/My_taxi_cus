@@ -1,0 +1,626 @@
+import { supabase } from '../utils/supabase';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../utils/supabase';
+import { notificationService } from './notificationService';
+
+export interface CreateRideParams {
+  customerId: string;
+  pickupLocation: string;
+  pickupLatitude: number;
+  pickupLongitude: number;
+  destinationLocation: string;
+  destinationLatitude: number;
+  destinationLongitude: number;
+  vehicleType: string;
+  fareAmount: number;
+  pickupLandmark?: string;
+  destinationLandmark?: string;
+}
+
+export interface RideDetails {
+  id: string;
+  ride_code: string;
+  customer_id: string;
+  driver_id?: string;
+  pickup_address: string;
+  pickup_latitude: number;
+  pickup_longitude: number;
+  destination_address: string;
+  destination_latitude: number;
+  destination_longitude: number;
+  status: string;
+  fare_amount: number;
+  vehicle_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+class RideService {
+  async createRide(params: CreateRideParams): Promise<{ data: RideDetails | null; error: any }> {
+    try {
+      console.log('🚗 Creating ride with params:', params);
+      
+      // Check if Supabase is properly configured
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey || 
+          supabaseKey.includes('placeholder') || 
+          supabaseUrl.includes('placeholder')) {
+        console.warn('⚠️ Supabase not configured - returning demo ride data');
+        
+        // Return demo ride data for testing
+        const demoRide: RideDetails = {
+          id: `demo-${Date.now()}`,
+          ride_code: `DEMO${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          customer_id: params.customerId,
+          pickup_address: params.pickupLocation,
+          pickup_latitude: params.pickupLatitude,
+          pickup_longitude: params.pickupLongitude,
+          destination_address: params.destinationLocation,
+          destination_latitude: params.destinationLatitude,
+          destination_longitude: params.destinationLongitude,
+          status: 'requested',
+          fare_amount: params.fareAmount,
+          vehicle_type: params.vehicleType,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        
+        console.log('✅ Demo ride created:', demoRide.ride_code);
+        return { data: demoRide, error: null };
+      }
+      
+      // Generate unique ride code
+      const rideCode = this.generateRideCode();
+      console.log('🎫 Generated ride code:', rideCode);
+      
+      const { data: ride, error } = await supabase
+        .from('rides')
+        .insert({
+          ride_code: rideCode,
+          customer_id: params.customerId,
+          pickup_address: params.pickupLocation,
+          pickup_latitude: params.pickupLatitude,
+          pickup_longitude: params.pickupLongitude,
+          pickup_landmark: params.pickupLandmark,
+          destination_address: params.destinationLocation,
+          destination_latitude: params.destinationLatitude,
+          destination_longitude: params.destinationLongitude,
+          destination_landmark: params.destinationLandmark,
+          vehicle_type: params.vehicleType,
+          fare_amount: params.fareAmount,
+          booking_type: 'regular',
+          status: 'requested',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Error creating ride in database:', error);
+        return { data: null, error };
+      }
+
+      console.log('✅ Ride created in database:', ride.id);
+
+      // Only notify drivers for regular rides, admin for special bookings
+      if (ride.booking_type === 'regular') {
+        try {
+          console.log('📢 Starting driver notification process for regular ride...');
+          
+          // Check if Supabase is properly configured before attempting notifications
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+          
+          if (!supabaseUrl || !supabaseKey || 
+              supabaseKey.includes('YourActualAnonKeyHere') || 
+              supabaseKey.includes('placeholder') ||
+              supabaseUrl.includes('placeholder')) {
+            console.warn('⚠️ Supabase not properly configured, skipping driver notifications');
+            console.log('✅ Ride created successfully without driver notifications');
+            return { data: ride, error: null };
+          }
+          
+          const notificationResult = await this.notifyDriversViaAPI(ride);
+          console.log('✅ Driver notifications sent successfully');
+        } catch (notifyError) {
+          console.warn('⚠️ Driver notification failed (non-blocking):', notifyError instanceof Error ? notifyError.message : 'Unknown error');
+          // Don't fail the ride creation if notifications fail
+        }
+      } else {
+        console.log('📋 Special booking type detected, admin notification will be handled by booking screen');
+      }
+
+      return { data: ride, error: null };
+    } catch (error) {
+      console.error('❌ Ride creation failed:', error);
+      return { data: null, error };
+    }
+  }
+
+  private async notifyDriversViaAPI(ride: any) {
+    try {
+      console.log('📢 Notifying drivers via edge function for ride:', ride.id);
+      
+      const apiUrl = `${SUPABASE_URL}/functions/v1/driver-api/notify-drivers`;
+      console.log('📡 Making request to:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ 
+          ride_id: ride.id,
+          ride_data: {
+            id: ride.id,
+            ride_id: ride.id,                    // Legacy format
+            rideId: ride.id,                     // Customer app format
+            customer_id: ride.customer_id,
+            customerId: ride.customer_id,        // Customer app format
+            pickup_address: ride.pickup_address,
+            pickupLocation: ride.pickup_address, // Customer app format
+            pickup_latitude: ride.pickup_latitude,
+            pickup_longitude: ride.pickup_longitude,
+            pickupCoords: {                      // Customer app format
+              latitude: ride.pickup_latitude,
+              longitude: ride.pickup_longitude,
+            },
+            pickup_latitude: ride.pickup_latitude,
+            pickup_longitude: ride.pickup_longitude,
+            destination_address: ride.destination_address,
+            destinationLocation: ride.destination_address, // Customer app format
+            destination_latitude: ride.destination_latitude,
+            destination_longitude: ride.destination_longitude,
+            destinationCoords: ride.destination_latitude ? { // Customer app format
+              latitude: ride.destination_latitude,
+              longitude: ride.destination_longitude,
+            } : null,
+            vehicle_type: ride.vehicle_type,
+            vehicleType: ride.vehicle_type,      // Customer app format
+            fare_amount: ride.fare_amount,
+            fareAmount: ride.fare_amount,        // Customer app format
+            booking_type: ride.booking_type,
+            bookingType: ride.booking_type,      // Customer app format
+            status: ride.status,
+            created_at: ride.created_at
+          }
+        }),
+      });
+      
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        throw new Error(`Driver notification API failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log(`✅ Notified ${result.drivers_notified || 0} drivers successfully:`, result);
+      return result;
+    } catch (error) {
+      console.error('❌ Error notifying drivers via API:', error);
+      throw error;
+    }
+  }
+
+  async acceptRide(rideId: string, driverId: string): Promise<{ data: RideDetails | null; error: any }> {
+    try {
+      const { data: ride, error } = await supabase
+        .from('rides')
+        .update({
+          driver_id: driverId,
+          status: 'accepted',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', rideId)
+        .eq('status', 'requested')
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error accepting ride:', error);
+        return { data: null, error };
+      }
+
+      if (ride) {
+        // Update driver status to busy
+        await supabase
+          .from('drivers')
+          .update({ status: 'busy' })
+          .eq('id', driverId);
+
+        // Get customer info and send notification
+        const { data: customer } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', ride.customer_id)
+          .single();
+
+        if (customer) {
+          await notificationService.sendRideAccepted(customer.id, ride);
+        }
+
+        // Cancel notifications for other drivers
+        await notificationService.cancelRideRequestNotifications(rideId, driverId);
+      }
+
+      return { data: ride, error: null };
+    } catch (error) {
+      console.error('Ride acceptance failed:', error);
+      return { data: null, error };
+    }
+  }
+
+  async updateRideStatus(rideId: string, status: string, driverId: string, extraData?: any): Promise<{ data: RideDetails | null; error: any }> {
+    try {
+      const { data: ride, error } = await supabase
+        .from('rides')
+        .update({
+          status,
+          updated_at: new Date().toISOString(),
+          ...(extraData || {})
+        })
+        .eq('id', rideId)
+        .eq('driver_id', driverId)
+        .select(`
+          *,
+          drivers!rides_driver_id_fkey (
+            id,
+            user_id,
+            license_number,
+            rating,
+            total_rides,
+            users!drivers_user_id_fkey (
+              full_name,
+              phone_number
+            ),
+            vehicles!fk_drivers_vehicle (
+              make,
+              model,
+              registration_number,
+              color,
+              vehicle_type
+            )
+          )
+        `)
+        .single();
+
+      if (error) {
+        console.error('Error updating ride status:', error);
+        return { data: null, error };
+      }
+
+      // Send status update notifications to customer
+      if (ride) {
+        const { data: customer } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', ride.customer_id)
+          .single();
+
+        if (customer) {
+          switch (status) {
+            case 'driver_arrived':
+              await notificationService.sendDriverArrived(customer.id, ride);
+              break;
+            case 'in_progress':
+              await notificationService.sendTripStarted(customer.id, ride);
+              break;
+            case 'completed':
+              await notificationService.sendTripCompletedWithFare(customer.id, ride);
+              break;
+          }
+        }
+      }
+
+      // Update driver status when trip completes
+      if (status === 'completed') {
+        await supabase
+          .from('drivers')
+          .update({ status: 'online' })
+          .eq('id', driverId);
+      }
+
+      return { data: ride, error: null };
+    } catch (error) {
+      console.error('Ride status update failed:', error);
+      return { data: null, error };
+    }
+  }
+
+  async findNearbyDrivers(latitude: number, longitude: number, vehicleType: string, radius: number = 10) {
+    try {
+      console.log('RideService: Finding nearby drivers', {
+        location: { latitude, longitude },
+        vehicleType,
+        radius
+      });
+      
+      // Use the new find-nearby-drivers edge function
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/find-nearby-drivers/find-drivers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          pickup_latitude: latitude,
+          pickup_longitude: longitude,
+          vehicle_type: vehicleType,
+          radius_km: radius,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Driver search API failed: ${response.status} ${response.statusText}`);
+      }
+
+      const responseData = await response.json();
+      console.log('Driver search API response:', responseData);
+
+      if (!responseData.success) {
+        console.error('Driver search failed:', responseData.error);
+        return { data: [], error: responseData.error };
+      }
+
+      // Transform API response to match expected format
+      const transformedDrivers = responseData.drivers?.map((driver: any) => ({
+        id: driver.driver_id,
+        user_id: driver.user_id,
+        rating: driver.rating,
+        distance: driver.distance_km,
+        eta: driver.eta_minutes,
+        users: {
+          full_name: driver.name,
+          phone_number: driver.phone,
+        },
+        vehicles: {
+          make: driver.vehicle.make,
+          model: driver.vehicle.model,
+          registration_number: driver.vehicle.registration_number,
+          color: driver.vehicle.color,
+        },
+        live_locations: [{
+          latitude: driver.location.latitude,
+          longitude: driver.location.longitude,
+          updated_at: driver.location.updated_at,
+        }],
+      })) || [];
+
+      console.log('Transformed drivers:', transformedDrivers.length);
+      return { data: transformedDrivers, error: null };
+    } catch (error) {
+      console.error('Find nearby drivers failed:', error);
+      return { data: [], error };
+    }
+  }
+
+  async getRideDetails(rideId: string): Promise<{ data: any; error: any }> {
+    try {
+      const { data: ride, error } = await supabase
+        .from('rides')
+        .select(`
+          *,
+          drivers (
+            id,
+            license_number,
+            rating,
+            users (full_name, phone_number),
+            vehicles!fk_drivers_vehicle (make, model, registration_number, color)
+          ),
+          users!rides_customer_id_fkey (full_name, phone_number)
+        `)
+        .eq('id', rideId)
+        .single();
+
+      return { data: ride, error };
+    } catch (error) {
+      console.error('Get ride details failed:', error);
+      return { data: null, error };
+    }
+  }
+
+  async getCurrentRide(userId: string): Promise<{ data: RideDetails | null; error: any }> {
+    try {
+      console.log('🔍 [RIDE_SERVICE] getCurrentRide called for userId:', userId);
+      console.log('🔍 [RIDE_SERVICE] Building query for current ride...');
+
+      const { data: rides, error } = await supabase
+        .from('rides')
+        .select(`
+          *,
+          drivers!rides_driver_id_fkey (
+            id,
+            user_id,
+            license_number,
+            rating,
+            total_rides,
+            status,
+            users!drivers_user_id_fkey (
+              full_name,
+              phone_number
+            ),
+            vehicles!fk_drivers_vehicle (
+              make,
+              model,
+              registration_number,
+              color,
+              vehicle_type
+            )
+          )
+        `)
+        .eq('customer_id', userId)
+        .in('status', ['requested', 'accepted', 'driver_arrived', 'in_progress'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      console.log('🔍 [RIDE_SERVICE] Query executed. Response:', {
+        hasData: !!rides && rides.length > 0,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorDetails: error?.details,
+        errorHint: error?.hint
+      });
+
+      const ride = rides && rides.length > 0 ? rides[0] : null;
+
+      if (ride) {
+        console.log('🔍 [RIDE_SERVICE] Found current ride:', {
+          id: ride.id,
+          status: ride.status,
+          customer_id: ride.customer_id,
+          driver_id: ride.driver_id,
+          hasDriverData: !!ride.drivers
+        });
+      }
+
+      return { data: ride, error };
+    } catch (error) {
+      console.error('Get current ride failed:', error);
+      console.error('🔍 [RIDE_SERVICE] Exception details:', JSON.stringify(error, null, 2));
+      return { data: null, error };
+    }
+  }
+
+  async cancelRide(rideId: string, userId: string, reason?: string): Promise<{ data: RideDetails | null; error: any }> {
+    try {
+      console.log('🚫 RideService.cancelRide called with:', { rideId, userId, reason });
+      
+      // First, get the current ride to check driver assignment
+      const { data: currentRide, error: fetchError } = await supabase
+        .from('rides')
+        .select('id, status, driver_id, customer_id')
+        .eq('id', rideId)
+        .single();
+
+      if (fetchError || !currentRide) {
+        console.error('Error fetching ride for cancellation:', fetchError);
+        return { data: null, error: fetchError || new Error('Ride not found') };
+      }
+
+      console.log('📋 Current ride before cancellation:', {
+        id: currentRide.id,
+        status: currentRide.status,
+        driver_id: currentRide.driver_id,
+        customer_id: currentRide.customer_id
+      });
+
+      const { data: ride, error } = await supabase
+        .from('rides')
+        .update({
+          status: 'cancelled',
+          cancelled_by: userId,
+          cancellation_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', rideId)
+        .eq('customer_id', userId)
+        .in('status', ['requested', 'accepted', 'driver_arrived']) // Only allow cancellation for these statuses
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error cancelling ride:', error);
+        return { data: null, error };
+      }
+
+      console.log('✅ Ride cancelled successfully in database:', ride.id);
+
+      // If a driver was assigned, free them up and notify them
+      if (currentRide.driver_id) {
+        console.log('🔄 Freeing up assigned driver:', currentRide.driver_id);
+        
+        // Update driver status back to online
+        const { error: driverUpdateError } = await supabase
+          .from('drivers')
+          .update({ 
+            status: 'online',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentRide.driver_id);
+
+        if (driverUpdateError) {
+          console.warn('⚠️ Error updating driver status (non-blocking):', driverUpdateError);
+        } else {
+          console.log('✅ Driver status updated to online');
+        }
+
+        // Send cancellation notification to the assigned driver
+        try {
+          const { data: driverUser } = await supabase
+            .from('drivers')
+            .select('user_id')
+            .eq('id', currentRide.driver_id)
+            .maybeSingle();
+
+          if (driverUser) {
+            await notificationService.sendRideCancelled(driverUser.user_id, ride);
+            console.log('✅ Cancellation notification sent to assigned driver');
+          }
+        } catch (driverNotificationError) {
+          console.warn('⚠️ Error sending driver cancellation notification (non-blocking):', driverNotificationError);
+        }
+      }
+
+      // Cancel any pending driver notifications for this ride
+      try {
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .update({ 
+            status: 'cancelled',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('type', 'ride_request')
+          .contains('data', { rideId: rideId })
+          .eq('status', 'unread');
+
+        if (notificationError) {
+          console.warn('⚠️ Error cancelling driver notifications (non-blocking):', notificationError);
+        } else {
+          console.log('✅ Cancelled pending driver notifications');
+        }
+      } catch (notificationError) {
+        console.warn('⚠️ Error cancelling notifications (non-blocking):', notificationError);
+      }
+
+      // Send cancellation notification to customer
+      if (ride) {
+        try {
+          await notificationService.sendRideCancelled(userId, ride);
+          console.log('✅ Cancellation notification sent to customer');
+        } catch (notificationError) {
+          console.warn('⚠️ Cancellation notification failed (non-blocking):', notificationError);
+        }
+      }
+
+      return { data: ride, error: null };
+    } catch (error) {
+      console.error('Ride cancellation failed:', error);
+      return { data: null, error };
+    }
+  }
+
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  private generateRideCode(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+}
+
+export const rideService = new RideService();

@@ -1,0 +1,2 @@
+[function.admin-notifications]
+allow_net = ["*.supabase.co"]

@@ -1,0 +1,2 @@
+[function.places-proxy]
+allow_net = ["maps.googleapis.com"]
