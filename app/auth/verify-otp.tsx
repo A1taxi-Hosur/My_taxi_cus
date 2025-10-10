@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Car, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -61,21 +62,47 @@ export default function VerifyOTPScreen() {
     }
 
     setLoading(true);
-    const { error } = await verifyOTP(phoneNumber, otpString);
 
-    if (error) {
-      Alert.alert('Error', error.message);
-      setLoading(false);
-    } else {
-      Alert.alert('Success', 'Login successful!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            setLoading(false);
-            router.replace('/(tabs)');
-          },
+    try {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      ]);
+        body: JSON.stringify({
+          phoneNumber,
+          otp: otpString,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Error', data.error || 'Failed to verify OTP');
+        setLoading(false);
+        return;
+      }
+
+      if (data.success && data.customerId) {
+        console.log('✅ OTP verified, customer ID:', data.customerId);
+
+        await AsyncStorage.setItem('customerId', data.customerId.toString());
+        await AsyncStorage.setItem('customerName', data.user.user_metadata?.full_name || 'User');
+        await AsyncStorage.setItem('customerPhone', data.user.user_metadata?.phone_number || phoneNumber);
+        await AsyncStorage.setItem('isAuthenticated', 'true');
+
+        console.log('✅ Customer data saved, navigating to home...');
+        setLoading(false);
+        router.replace('/(tabs)');
+      } else {
+        Alert.alert('Error', 'Verification failed');
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      Alert.alert('Error', 'An error occurred during verification');
+      setLoading(false);
     }
   };
 

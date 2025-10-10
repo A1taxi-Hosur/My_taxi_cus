@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Session, AuthError } from '@supabase/supabase-js';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../utils/supabase';
 
 interface AuthContextType {
@@ -47,12 +48,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       setLoading(true);
       try {
+        const isAuthenticated = await AsyncStorage.getItem('isAuthenticated');
+
+        if (isAuthenticated === 'true') {
+          const customerId = await AsyncStorage.getItem('customerId');
+          const customerName = await AsyncStorage.getItem('customerName');
+          const customerPhone = await AsyncStorage.getItem('customerPhone');
+
+          if (customerId) {
+            console.log('✅ Found authenticated customer in AsyncStorage');
+            setUser({
+              id: customerId,
+              email: `${customerPhone}@phone.a1taxi.local`,
+              full_name: customerName || 'User',
+              phone_number: customerPhone,
+              role: 'customer',
+              customer_id: customerId
+            });
+            setLoading(false);
+            return;
+          }
+        }
+
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
         if (error) {
           console.error('Error getting session:', error);
-          // If there's an error getting the session (like invalid refresh token),
-          // clear the corrupted session data
           if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
             const keysToRemove = [];
             for (let i = 0; i < localStorage.length; i++) {
@@ -67,7 +88,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
         } else {
           setSession(session);
-          // Use session user data directly instead of fetching from database
           setUser(session?.user ? {
             id: session.user.id,
             email: session.user.email,
@@ -81,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setUser(null);
       }
-      
+
       if (mountedRef.current) {
         setLoading(false);
       }
@@ -246,26 +266,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error(data.error || 'Failed to verify OTP') };
       }
 
-      if (data.success && data.email && data.password) {
+      if (data.success && data.customerId) {
         console.log('✅ User verified successfully!');
         console.log('✅ User ID:', data.userId);
         console.log('✅ Customer ID:', data.customerId);
-        console.log('✅ Email:', data.email);
 
-        console.log('🔐 Signing in with credentials...');
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: data.email,
-          password: data.password,
+        setUser({
+          id: data.userId,
+          email: data.user.email,
+          full_name: data.user.user_metadata?.full_name || 'User',
+          phone_number: data.user.user_metadata?.phone_number,
+          role: 'customer',
+          customer_id: data.customerId
         });
 
-        if (signInError) {
-          console.error('❌ Sign in error:', signInError);
-          return { error: signInError };
-        }
-
-        console.log('✅ Signed in successfully!');
-        console.log('✅ Session created:', !!signInData.session);
-        console.log('✅ User:', signInData.user?.id);
+        console.log('✅ User data set, verification complete');
       } else {
         console.error('❌ Invalid response from server');
         return { error: new Error('Authentication failed: Invalid response') };
