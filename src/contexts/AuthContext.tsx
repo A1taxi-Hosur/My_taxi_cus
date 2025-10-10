@@ -173,15 +173,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sendOTP = async (phoneNumber: string, name: string) => {
     try {
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/notifications`, {
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({
           phoneNumber,
           name,
-          action: 'send-otp',
         }),
       });
 
