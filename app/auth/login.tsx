@@ -14,27 +14,51 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Car } from 'lucide-react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { sendOTP } = useAuth();
+  const router = useRouter();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+  const formatPhoneNumber = (text: string) => {
+    const cleaned = text.replace(/\D/g, '');
+    return cleaned;
+  };
+
+  const handleSendOTP = async () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+
+    if (!phoneNumber.trim()) {
+      Alert.alert('Error', 'Please enter your phone number');
+      return;
+    }
+
+    const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+
+    if (formattedPhone.length < 10) {
+      Alert.alert('Error', 'Please enter a valid phone number');
       return;
     }
 
     setLoading(true);
-    const { error } = await signIn(email.trim(), password);
-    
+    const { error } = await sendOTP(formattedPhone, name.trim());
+
     if (error) {
       Alert.alert('Error', error.message);
+      setLoading(false);
+    } else {
+      setLoading(false);
+      router.push({
+        pathname: '/auth/verify-otp',
+        params: { phoneNumber: formattedPhone, name: name.trim() }
+      });
     }
-    setLoading(false);
   };
 
   return (
@@ -43,7 +67,7 @@ export default function LoginScreen() {
         colors={['#2563EB', '#1D4ED8']}
         style={styles.gradient}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardView}
         >
@@ -53,57 +77,54 @@ export default function LoginScreen() {
                 <Car size={48} color="#FFFFFF" />
               </View>
               <Text style={styles.title}>A1 Taxi</Text>
-              <Text style={styles.subtitle}>Welcome back! Sign in to continue</Text>
+              <Text style={styles.subtitle}>Sign in with your phone number</Text>
             </View>
 
             <View style={styles.form}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Email</Text>
+                <Text style={styles.inputLabel}>Name</Text>
                 <TextInput
                   style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Enter your email"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your full name"
                   placeholderTextColor="#9CA3AF"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
+                  autoCapitalize="words"
+                  autoComplete="name"
                 />
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Password</Text>
+                <Text style={styles.inputLabel}>Phone Number</Text>
                 <TextInput
                   style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter your password"
+                  value={phoneNumber}
+                  onChangeText={(text) => setPhoneNumber(formatPhoneNumber(text))}
+                  placeholder="Enter phone number with country code"
                   placeholderTextColor="#9CA3AF"
-                  secureTextEntry
-                  autoComplete="password"
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
                 />
+                <Text style={styles.helperText}>Include country code (e.g., +1234567890)</Text>
               </View>
 
               <TouchableOpacity
                 style={[styles.loginButton, loading && styles.disabledButton]}
-                onPress={handleLogin}
+                onPress={handleSendOTP}
                 disabled={loading}
                 activeOpacity={0.8}
               >
                 {loading ? (
                   <ActivityIndicator size="small" color="#2563EB" />
                 ) : (
-                  <Text style={styles.loginButtonText}>Sign In</Text>
+                  <Text style={styles.loginButtonText}>Send OTP</Text>
                 )}
               </TouchableOpacity>
 
-              <View style={styles.signUpContainer}>
-                <Text style={styles.signUpText}>Don't have an account? </Text>
-                <Link href="/auth/register" asChild>
-                  <TouchableOpacity>
-                    <Text style={styles.signUpLink}>Sign Up</Text>
-                  </TouchableOpacity>
-                </Link>
+              <View style={styles.infoContainer}>
+                <Text style={styles.infoText}>
+                  You will receive a 6-digit verification code via SMS
+                </Text>
               </View>
             </View>
           </View>
@@ -154,7 +175,7 @@ const styles = StyleSheet.create({
   },
   form: {
     flex: 1,
-    maxHeight: 400,
+    maxHeight: 450,
   },
   inputContainer: {
     marginBottom: 20,
@@ -172,6 +193,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
   },
+  helperText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 4,
+  },
   loginButton: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -188,19 +214,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#2563EB',
   },
-  signUpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  infoContainer: {
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  signUpText: {
+  infoText: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
-  },
-  signUpLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    textDecorationLine: 'underline',
+    textAlign: 'center',
   },
 });
