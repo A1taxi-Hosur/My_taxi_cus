@@ -246,33 +246,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error(data.error || 'Failed to verify OTP') };
       }
 
-      if (data.sessionUrl) {
-        console.log('🔑 Session URL received, extracting tokens...');
-        const sessionUrl = new URL(data.sessionUrl);
-        const accessToken = sessionUrl.searchParams.get('access_token');
-        const refreshToken = sessionUrl.searchParams.get('refresh_token');
+      if (data.accessToken && data.refreshToken) {
+        console.log('🔑 Tokens received from server');
+        console.log('🔑 Access token exists:', !!data.accessToken);
+        console.log('🔑 Refresh token exists:', !!data.refreshToken);
+        console.log('🔑 User data:', data.user);
 
-        console.log('🔑 Access token exists:', !!accessToken);
-        console.log('🔑 Refresh token exists:', !!refreshToken);
+        console.log('🔐 Setting session with tokens...');
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: data.accessToken,
+          refresh_token: data.refreshToken,
+        });
 
-        if (accessToken && refreshToken) {
-          console.log('🔐 Setting session...');
-          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (sessionError) {
-            console.error('❌ Session error:', sessionError);
-            return { error: sessionError };
-          }
-
-          console.log('✅ Session set successfully:', sessionData);
-        } else {
-          console.error('❌ Missing tokens in session URL');
+        if (sessionError) {
+          console.error('❌ Session error:', sessionError);
+          return { error: sessionError };
         }
+
+        console.log('✅ Session set successfully!');
+        console.log('✅ User authenticated:', sessionData.user?.id);
+        console.log('✅ Customer ID:', data.customerId);
       } else {
-        console.error('❌ No session URL in response');
+        console.error('❌ Missing tokens in response');
+        return { error: new Error('Authentication failed: No tokens received') };
       }
 
       console.log('✅ OTP verification complete');

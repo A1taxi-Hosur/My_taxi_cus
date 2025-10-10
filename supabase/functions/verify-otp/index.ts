@@ -204,13 +204,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: authUser.email || `${phoneNumber.replace(/\+/g, '')}@phone.local`,
+    console.log('🔐 Creating session tokens...');
+    const { data: sessionData, error: sessionError } = await supabase.auth.admin.createSession({
+      user_id: authUser.id
     });
 
     if (sessionError || !sessionData) {
-      console.error('Session error:', sessionError);
+      console.error('❌ Session error:', sessionError);
+      console.error('❌ Session error details:', JSON.stringify(sessionError, null, 2));
       return new Response(
         JSON.stringify({ error: 'Failed to create session' }),
         {
@@ -223,11 +224,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('✅ Session created successfully');
+    console.log('🔐 Access token length:', sessionData.access_token?.length);
+    console.log('🔐 Refresh token length:', sessionData.refresh_token?.length);
+
     return new Response(
       JSON.stringify({
         success: true,
         customerId,
-        sessionUrl: sessionData.properties.action_link
+        accessToken: sessionData.access_token,
+        refreshToken: sessionData.refresh_token,
+        user: sessionData.user
       }),
       {
         headers: {
