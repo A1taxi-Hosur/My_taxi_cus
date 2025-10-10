@@ -49,28 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       setLoading(true);
       try {
-        const isAuthenticated = await AsyncStorage.getItem('isAuthenticated');
-
-        if (isAuthenticated === 'true') {
-          const customerId = await AsyncStorage.getItem('customerId');
-          const customerName = await AsyncStorage.getItem('customerName');
-          const customerPhone = await AsyncStorage.getItem('customerPhone');
-
-          if (customerId) {
-            console.log('✅ Found authenticated customer in AsyncStorage');
-            setUser({
-              id: customerId,
-              email: `${customerPhone}@phone.a1taxi.local`,
-              full_name: customerName || 'User',
-              phone_number: customerPhone,
-              role: 'customer',
-              customer_id: customerId
-            });
-            setLoading(false);
-            return;
-          }
-        }
-
+        // Always check Supabase session first to ensure we have a valid UUID
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
@@ -94,7 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: session.user.email,
             full_name: session.user.user_metadata?.full_name || 'User',
             phone_number: session.user.user_metadata?.phone_number,
-            role: 'customer'
+            role: 'customer',
+            customer_id: session.user.id // Use the same UUID from Supabase auth
           } : null);
         }
       } catch (error) {
@@ -117,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: session.user.id,
           email: session.user.email,
           full_name: session.user.user_metadata?.full_name || 'User',
+          customer_id: session.user.id, // Use the same UUID from Supabase auth
           phone_number: session.user.user_metadata?.phone_number,
           role: 'customer'
         } : null);
@@ -304,6 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('🚪 Starting sign out process...');
 
+      // Clear old AsyncStorage keys (no longer used)
       await AsyncStorage.removeItem('isAuthenticated');
       await AsyncStorage.removeItem('customerId');
       await AsyncStorage.removeItem('customerName');
