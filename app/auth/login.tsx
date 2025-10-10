@@ -47,17 +47,28 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
-    const { error } = await sendOTP(formattedPhone, name.trim());
+    const { error, otp } = await sendOTP(formattedPhone, name.trim());
 
     if (error) {
       Alert.alert('Error', error.message);
       setLoading(false);
     } else {
       setLoading(false);
-      router.push({
-        pathname: '/auth/verify-otp',
-        params: { phoneNumber: formattedPhone, name: name.trim() }
-      });
+      Alert.alert(
+        'OTP Sent',
+        `Your OTP code is: ${otp}\n\n(In production, this would be sent via SMS)`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              router.push({
+                pathname: '/auth/verify-otp',
+                params: { phoneNumber: formattedPhone, name: name.trim() }
+              });
+            }
+          }
+        ]
+      );
     }
   };
 

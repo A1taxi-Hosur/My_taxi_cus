@@ -86,14 +86,24 @@ export default function VerifyOTPScreen() {
     }
 
     setResending(true);
-    const { error } = await sendOTP(phoneNumber, name);
+    const { error, otp: newOtp } = await sendOTP(phoneNumber, name);
 
     if (error) {
       Alert.alert('Error', error.message);
     } else {
-      Alert.alert('Success', 'OTP has been resent to your phone');
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+      Alert.alert(
+        'OTP Resent',
+        `Your new OTP code is: ${newOtp}\n\n(In production, this would be sent via SMS)`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setOtp(['', '', '', '', '', '']);
+              inputRefs.current[0]?.focus();
+            }
+          }
+        ]
+      );
     }
     setResending(false);
   };

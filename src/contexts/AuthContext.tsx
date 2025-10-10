@@ -193,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error(data.error || 'Failed to send OTP') };
       }
 
-      return { error: null };
+      return { error: null, otp: data.devOtp };
     } catch (error) {
       console.error('Error sending OTP:', error);
       return { error: error as Error };
@@ -202,6 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const verifyOTP = async (phoneNumber: string, otp: string) => {
     try {
+      console.log('🔐 Verifying OTP for:', phoneNumber);
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const response = await fetch(`${supabaseUrl}/functions/v1/verify-otp`, {
         method: 'POST',
@@ -215,31 +216,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       const data = await response.json();
+      console.log('📦 Verify OTP response:', data);
 
       if (!response.ok) {
+        console.error('❌ OTP verification failed:', data.error);
         return { error: new Error(data.error || 'Failed to verify OTP') };
       }
 
       if (data.sessionUrl) {
+        console.log('🔑 Session URL received, extracting tokens...');
         const sessionUrl = new URL(data.sessionUrl);
         const accessToken = sessionUrl.searchParams.get('access_token');
         const refreshToken = sessionUrl.searchParams.get('refresh_token');
 
+        console.log('🔑 Access token exists:', !!accessToken);
+        console.log('🔑 Refresh token exists:', !!refreshToken);
+
         if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
+          console.log('🔐 Setting session...');
+          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
 
           if (sessionError) {
+            console.error('❌ Session error:', sessionError);
             return { error: sessionError };
           }
+
+          console.log('✅ Session set successfully:', sessionData);
+        } else {
+          console.error('❌ Missing tokens in session URL');
         }
+      } else {
+        console.error('❌ No session URL in response');
       }
 
+      console.log('✅ OTP verification complete');
       return { error: null };
     } catch (error) {
-      console.error('Error verifying OTP:', error);
+      console.error('❌ Error verifying OTP:', error);
       return { error: error as Error };
     }
   };
