@@ -67,7 +67,15 @@ export default function VerifyOTPScreen() {
       Alert.alert('Error', error.message);
       setLoading(false);
     } else {
-      setLoading(false);
+      Alert.alert('Success', 'Login successful!', [
+        {
+          text: 'OK',
+          onPress: () => {
+            setLoading(false);
+            router.replace('/(tabs)');
+          },
+        },
+      ]);
     }
   };
 
