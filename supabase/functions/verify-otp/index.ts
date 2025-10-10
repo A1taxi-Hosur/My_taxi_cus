@@ -72,7 +72,7 @@ Deno.serve(async (req: Request) => {
     let customerId: string;
 
     if (existingCustomer) {
-      customerId = existingCustomer.customer_id;
+      customerId = existingCustomer.id.toString();
 
       await supabase
         .from('Customers')
@@ -80,14 +80,13 @@ Deno.serve(async (req: Request) => {
           name: otpRecord.name,
           updated_at: new Date().toISOString()
         })
-        .eq('customer_id', customerId);
+        .eq('id', existingCustomer.id);
     } else {
       const { data: newCustomer, error: customerError } = await supabase
         .from('Customers')
         .insert({
           name: otpRecord.name,
           phone_number: phoneNumber,
-          status: 'Active',
         })
         .select()
         .single();
@@ -95,7 +94,7 @@ Deno.serve(async (req: Request) => {
       if (customerError || !newCustomer) {
         console.error('Error creating customer:', customerError);
         return new Response(
-          JSON.stringify({ error: 'Failed to create customer account' }),
+          JSON.stringify({ error: 'Failed to create customer account', details: customerError?.message }),
           {
             status: 500,
             headers: {
@@ -106,7 +105,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      customerId = newCustomer.customer_id;
+      customerId = newCustomer.id.toString();
     }
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
