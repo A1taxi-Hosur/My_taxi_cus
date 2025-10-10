@@ -86,24 +86,38 @@ export default function LoginScreen() {
       console.log('💬 Showing alert with message:', message);
       console.log('🧭 Will navigate to verify-otp after alert');
 
-      Alert.alert(
-        'OTP Sent',
-        message,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              console.log('🧭 Alert dismissed, navigating to verify-otp...');
-              console.log('🧭 Target params:', { phoneNumber: formattedPhone, name: name.trim() });
-              router.push({
-                pathname: '/auth/verify-otp',
-                params: { phoneNumber: formattedPhone, name: name.trim() }
-              });
-              console.log('🧭 Navigation triggered');
+      if (Platform.OS === 'web') {
+        console.log('🌐 Web platform - using window.confirm');
+        const confirmed = window.confirm(`OTP Sent\n\n${message}\n\nClick OK to continue to verification.`);
+        if (confirmed) {
+          console.log('🧭 User confirmed, navigating to verify-otp...');
+          console.log('🧭 Target params:', { phoneNumber: formattedPhone, name: name.trim() });
+          router.push({
+            pathname: '/auth/verify-otp',
+            params: { phoneNumber: formattedPhone, name: name.trim() }
+          });
+          console.log('🧭 Navigation triggered');
+        }
+      } else {
+        Alert.alert(
+          'OTP Sent',
+          message,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                console.log('🧭 Alert dismissed, navigating to verify-otp...');
+                console.log('🧭 Target params:', { phoneNumber: formattedPhone, name: name.trim() });
+                router.push({
+                  pathname: '/auth/verify-otp',
+                  params: { phoneNumber: formattedPhone, name: name.trim() }
+                });
+                console.log('🧭 Navigation triggered');
+              }
             }
-          }
-        ]
-      );
+          ]
+        );
+      }
       console.log('💬 Alert displayed');
     } catch (err) {
       console.error('💥 Exception caught:', err);
