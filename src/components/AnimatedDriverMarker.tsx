@@ -103,8 +103,8 @@ export default function AnimatedDriverMarker({
             cx="40"
             cy="40"
             r="30"
-            fill="#2563EB"
-            fillOpacity="0.2"
+            fill="#FFA500"
+            fillOpacity="0.3"
           />
         </Svg>
       </Animated.View>
@@ -119,7 +119,7 @@ export default function AnimatedDriverMarker({
       >
         <View style={styles.carImageContainer}>
           <Image
-            source={require('../../assets/images/vector-top-view-car-vehicle-260nw-724653760.webp')}
+            source={require('../../assets/images/29309742.jpg')}
             style={styles.carImage}
             resizeMode="contain"
           />
@@ -160,21 +160,10 @@ const styles = StyleSheet.create({
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: '#2563EB',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    overflow: 'hidden',
   },
   carImage: {
-    width: 50,
-    height: 50,
-    transform: [{ rotate: '90deg' }],
+    width: 60,
+    height: 60,
   },
   shadowContainer: {
     position: 'absolute',
