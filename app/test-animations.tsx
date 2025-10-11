@@ -10,12 +10,14 @@ import {
   Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, RotateCcw, Settings, Car, Clock, MapPin } from 'lucide-react-native';
+import { Play, RotateCcw, Settings, Car, Clock, MapPin, Navigation as NavIcon } from 'lucide-react-native';
 import DriverArrivingAnimation from '../src/components/DriverArrivingAnimation';
 import AnimatedETAProgressRing from '../src/components/AnimatedETAProgressRing';
 import AnimatedDriverMarker from '../src/components/AnimatedDriverMarker';
+import { useRouter } from 'expo-router';
 
 export default function TestAnimationsScreen() {
+  const router = useRouter();
   const [showCelebration, setShowCelebration] = useState(false);
   const [driverName, setDriverName] = useState('John Smith');
   const [vehicleInfo, setVehicleInfo] = useState('Toyota Camry');
@@ -83,6 +85,13 @@ export default function TestAnimationsScreen() {
       action: simulateDriverMovement,
       icon: Car,
       color: '#2563EB',
+    },
+    {
+      name: 'Live Tracking Test',
+      description: 'Test real-time driver movement',
+      action: () => router.push('/test-live-tracking'),
+      icon: NavIcon,
+      color: '#8B5CF6',
     },
     {
       name: 'ETA Countdown',

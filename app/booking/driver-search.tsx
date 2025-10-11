@@ -20,6 +20,7 @@ import { realtimeService } from '../../src/services/realtimeService';
 import EnhancedGoogleMapView from '../../src/components/EnhancedGoogleMapView';
 import DriverArrivingAnimation from '../../src/components/DriverArrivingAnimation';
 import AnimatedETAProgressRing from '../../src/components/AnimatedETAProgressRing';
+import LiveDriverTracking from '../../src/components/LiveDriverTracking';
 
 // Add debug logging for component lifecycle
 console.log('🚨 [DEBUG] DriverSearchScreen module loaded');
@@ -821,24 +822,51 @@ export default function DriverSearchScreen() {
               initialRegion={{
                 latitude: rideDetails.pickupLatitude || 12.7402,
                 longitude: rideDetails.pickupLongitude || 77.8240,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
+                latitudeDelta: 0.015,
+                longitudeDelta: 0.015,
               }}
               pickupCoords={rideDetails.pickupLatitude && rideDetails.pickupLongitude ? {
                 latitude: rideDetails.pickupLatitude,
                 longitude: rideDetails.pickupLongitude,
               } : undefined}
-              destinationCoords={rideDetails.destinationLatitude && rideDetails.destinationLongitude ? {
+              destinationCoords={(searchStatus === 'found' || searchStatus === 'celebrating') && driverLocation ? {
+                latitude: driverLocation.latitude,
+                longitude: driverLocation.longitude,
+              } : (rideDetails.destinationLatitude && rideDetails.destinationLongitude ? {
                 latitude: rideDetails.destinationLatitude,
                 longitude: rideDetails.destinationLongitude,
-              } : undefined}
+              } : undefined)}
               driverLocation={driverLocation}
               showRoute={true}
               style={styles.map}
-              showUserLocation={true}
+              showUserLocation={false}
               followUserLocation={false}
             />
           </View>
+
+          {/* Live Driver Tracking Overlay */}
+          {(searchStatus === 'found' || searchStatus === 'celebrating') && driverData && driverLocation && (
+            <View style={styles.liveTrackingOverlay}>
+              <LiveDriverTracking
+                driverLocation={{
+                  latitude: driverLocation.latitude,
+                  longitude: driverLocation.longitude,
+                  heading: driverLocation.heading,
+                }}
+                pickupLocation={{
+                  latitude: rideDetails.pickupLatitude,
+                  longitude: rideDetails.pickupLongitude,
+                  address: rideDetails.pickupLocation,
+                }}
+                driverInfo={{
+                  name: driverData.name,
+                  vehicle: `${driverData.vehicle.make} ${driverData.vehicle.model}`,
+                  plateNumber: driverData.vehicle.registration,
+                  phone: driverData.phone,
+                }}
+              />
+            </View>
+          )}
 
           {/* Search Status */}
           <View style={styles.statusContainer}>
@@ -853,7 +881,7 @@ export default function DriverSearchScreen() {
               </View>
             )}
 
-            {(searchStatus === 'found' || searchStatus === 'celebrating') && driverData && (
+            {(searchStatus === 'found' || searchStatus === 'celebrating') && driverData && !driverLocation && (
               <View style={styles.foundContainer}>
                 <View style={styles.foundHeader}>
                   <CheckCircle size={32} color="#059669" />
@@ -1084,6 +1112,13 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  liveTrackingOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
   statusContainer: {
     marginBottom: 20,
