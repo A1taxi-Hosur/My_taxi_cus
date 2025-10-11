@@ -471,31 +471,50 @@ export default function AirportBookingScreen() {
     setLoading(true);
     
     try {
-      console.log('🎯 [AIRPORT] Inserting booking into database...');
-      const { data, error } = await supabase
-        .from('scheduled_bookings')
-        .insert({
-          customer_id: user.id,
-          booking_type: 'airport',
-          vehicle_type: selectedVehicle,
-          pickup_address: fromLocation,
-          pickup_latitude: fromCoords.latitude,
-          pickup_longitude: fromCoords.longitude,
-          destination_address: toLocation,
-          destination_latitude: toCoords.latitude,
-          destination_longitude: toCoords.longitude,
-          scheduled_time: pickupDateTime.toISOString(),
-          estimated_fare: selectedFare,
-          special_instructions: `Airport ${serviceType} - ${serviceType === 'pickup' ? 'From' : 'To'} Kempegowda Airport • Pickup time: ${pickupDateTime.toLocaleString()}.`,
-          status: 'pending',
-        })
-        .select()
-        .single();
+      console.log('🎯 [AIRPORT] Creating booking via edge function...');
 
-      if (error) {
-        console.error('🎯 [AIRPORT] Database error:', error);
-        throw error;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      const bookingData = {
+        customer_id: user.id,
+        booking_type: 'airport',
+        vehicle_type: selectedVehicle,
+        pickup_address: fromLocation,
+        pickup_latitude: fromCoords.latitude,
+        pickup_longitude: fromCoords.longitude,
+        destination_address: toLocation,
+        destination_latitude: toCoords.latitude,
+        destination_longitude: toCoords.longitude,
+        scheduled_time: pickupDateTime.toISOString(),
+        estimated_fare: selectedFare,
+        special_instructions: `Airport ${serviceType} - ${serviceType === 'pickup' ? 'From' : 'To'} Kempegowda Airport • Pickup time: ${pickupDateTime.toLocaleString()}.`,
+        status: 'pending',
+      };
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-scheduled-booking`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify(bookingData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('🎯 [AIRPORT] Edge function error:', errorText);
+        throw new Error(errorText);
       }
+
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('🎯 [AIRPORT] Database error:', result.error);
+        throw new Error(result.error);
+      }
+
+      const data = result.data;
 
       console.log('🎯 [AIRPORT] Booking created successfully:', data.id);
 

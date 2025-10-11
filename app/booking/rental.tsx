@@ -337,32 +337,51 @@ export default function RentalBookingScreen() {
     setLoading(true);
     
     try {
-      console.log('🎯 [RENTAL] Inserting booking into database...');
-      const { data, error } = await supabase
-        .from('scheduled_bookings')
-        .insert({
-          customer_id: user.id,
-          booking_type: 'rental',
-          vehicle_type: selectedVehicle,
-          pickup_address: pickupLocation,
-          pickup_latitude: pickupCoords.latitude,
-          pickup_longitude: pickupCoords.longitude,
-          destination_address: pickupLocation,
-          destination_latitude: pickupCoords.latitude,
-          destination_longitude: pickupCoords.longitude,
-          scheduled_time: pickupDateTime.toISOString(),
-          rental_hours: selectedPackage.hours,
-          estimated_fare: calculatedFare,
-          special_instructions: `Rental booking for ${selectedPackage.hours} hours with ${selectedPackage.freeKms}km included. Extra charges: ₹${selectedPackage.extraKmRate}/km & ₹${selectedPackage.extraMinRate}/min. Pickup time: ${pickupDateTime.toLocaleString()}. ADMIN ALLOCATION REQUIRED - Do not send to drivers directly.`,
-          status: 'pending',
-        })
-        .select()
-        .single();
+      console.log('🎯 [RENTAL] Creating booking via edge function...');
 
-      if (error) {
-        console.error('🎯 [RENTAL] Database error:', error);
-        throw error;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      const bookingData = {
+        customer_id: user.id,
+        booking_type: 'rental',
+        vehicle_type: selectedVehicle,
+        pickup_address: pickupLocation,
+        pickup_latitude: pickupCoords.latitude,
+        pickup_longitude: pickupCoords.longitude,
+        destination_address: pickupLocation,
+        destination_latitude: pickupCoords.latitude,
+        destination_longitude: pickupCoords.longitude,
+        scheduled_time: pickupDateTime.toISOString(),
+        rental_hours: selectedPackage.hours,
+        estimated_fare: calculatedFare,
+        special_instructions: `Rental booking for ${selectedPackage.hours} hours with ${selectedPackage.freeKms}km included. Extra charges: ₹${selectedPackage.extraKmRate}/km & ₹${selectedPackage.extraMinRate}/min. Pickup time: ${pickupDateTime.toLocaleString()}. ADMIN ALLOCATION REQUIRED - Do not send to drivers directly.`,
+        status: 'pending',
+      };
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-scheduled-booking`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify(bookingData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('🎯 [RENTAL] Edge function error:', errorText);
+        throw new Error(errorText);
       }
+
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('🎯 [RENTAL] Database error:', result.error);
+        throw new Error(result.error);
+      }
+
+      const data = result.data;
 
       console.log('🎯 [RENTAL] Booking created successfully:', data.id);
 
