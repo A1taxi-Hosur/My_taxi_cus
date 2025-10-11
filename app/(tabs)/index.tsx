@@ -451,12 +451,9 @@ export default function HomeScreen() {
       <EnhancedLocationSearchModal
         visible={showPickupModal}
         onClose={() => setShowPickupModal(false)}
-        onSelectLocation={(location) => {
-          setPickupLocation(location.address);
-          setPickupCoords({
-            latitude: location.latitude,
-            longitude: location.longitude,
-          });
+        onLocationSelect={(address, coords) => {
+          setPickupLocation(address);
+          setPickupCoords(coords);
           setShowPickupModal(false);
         }}
         currentLocation={currentLocation}
@@ -466,12 +463,9 @@ export default function HomeScreen() {
       <EnhancedLocationSearchModal
         visible={showDestinationModal}
         onClose={() => setShowDestinationModal(false)}
-        onSelectLocation={(location) => {
-          setDestinationLocation(location.address);
-          setDestinationCoords({
-            latitude: location.latitude,
-            longitude: location.longitude,
-          });
+        onLocationSelect={(address, coords) => {
+          setDestinationLocation(address);
+          setDestinationCoords(coords);
           setShowDestinationModal(false);
         }}
         currentLocation={currentLocation}
