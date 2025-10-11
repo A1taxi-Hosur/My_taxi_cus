@@ -115,9 +115,10 @@ export default function TestGPSTrackingScreen() {
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      setSimulationStatus('Simulating driver movement...');
+      setSimulationStatus(`🚗 Watch the map! Driver moving for ${scenario.duration}s...`);
+      console.log('📡 Starting edge function simulation...');
 
-      const response = await fetch(
+      fetch(
         `${supabaseUrl}/functions/v1/simulate-driver-movement`,
         {
           method: 'POST',
@@ -135,17 +136,26 @@ export default function TestGPSTrackingScreen() {
             updateIntervalSeconds: 3,
           }),
         }
-      );
+      ).then(async (response) => {
+        const result = await response.json();
+        if (response.ok) {
+          console.log('✅ Simulation completed:', result);
+          setSimulationStatus('✅ Simulation completed!');
+          Alert.alert('Success', 'GPS simulation completed successfully!');
+        } else {
+          console.error('❌ Simulation failed:', result);
+          setSimulationStatus('❌ Simulation failed');
+          Alert.alert('Error', result.error || 'Simulation failed');
+        }
+        setIsSimulating(false);
+      }).catch((error) => {
+        console.error('❌ Edge function error:', error);
+        setSimulationStatus(`❌ Error: ${error.message}`);
+        Alert.alert('Error', error.message || 'Failed to start simulation');
+        setIsSimulating(false);
+      });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Simulation failed');
-      }
-
-      console.log('✅ Simulation completed:', result);
-      setSimulationStatus('✅ Simulation completed!');
-      Alert.alert('Success', 'GPS simulation completed successfully!');
+      console.log('👀 Simulation running in background. Watch for real-time updates on the map!');
     } catch (error) {
       console.error('❌ Simulation error:', error);
       setSimulationStatus('❌ Simulation failed');

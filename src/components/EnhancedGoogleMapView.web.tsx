@@ -104,6 +104,7 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
 
   useEffect(() => {
     if (isMapReady && googleMapRef.current && driverLocation) {
+      console.log('🗺️ Map: Updating driver marker from driverLocation prop change:', driverLocation);
       updateDriverMarker(driverLocation);
     }
   }, [isMapReady, driverLocation]);
@@ -224,35 +225,67 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
     }
   };
 
+  const createCarIcon = (heading: number = 0) => {
+    const rotation = heading;
+    const svg = `
+      <svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+        <g transform="rotate(${rotation} 30 30)">
+          <!-- Shadow -->
+          <ellipse cx="30" cy="50" rx="18" ry="6" fill="rgba(0,0,0,0.2)"/>
+
+          <!-- Car body -->
+          <g transform="translate(15, 10)">
+            <!-- Main body -->
+            <rect x="5" y="10" width="20" height="30" rx="3" fill="#2563EB"/>
+
+            <!-- Windshield -->
+            <rect x="8" y="12" width="14" height="8" rx="1" fill="#60A5FA"/>
+
+            <!-- Rear window -->
+            <rect x="8" y="30" width="14" height="6" rx="1" fill="#60A5FA"/>
+
+            <!-- Wheels -->
+            <circle cx="8" cy="15" r="3" fill="#1F2937"/>
+            <circle cx="22" cy="15" r="3" fill="#1F2937"/>
+            <circle cx="8" cy="35" r="3" fill="#1F2937"/>
+            <circle cx="22" cy="35" r="3" fill="#1F2937"/>
+
+            <!-- Front indicator -->
+            <path d="M 15 5 L 12 10 L 18 10 Z" fill="#FBBF24"/>
+
+            <!-- White border -->
+            <rect x="5" y="10" width="20" height="30" rx="3" fill="none" stroke="white" stroke-width="1.5"/>
+          </g>
+        </g>
+      </svg>
+    `;
+
+    return {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+      scaledSize: new google.maps.Size(60, 60),
+      anchor: new google.maps.Point(30, 30),
+    };
+  };
+
   const updateDriverMarker = (location: { latitude: number; longitude: number; heading?: number }) => {
     if (!googleMapRef.current || !window.google) return;
 
     const position = new google.maps.LatLng(location.latitude, location.longitude);
+    const heading = location.heading || 0;
 
     if (driverMarkerRef.current) {
       console.log('🚗 Updating driver marker position:', location);
       driverMarkerRef.current.setPosition(position);
-
-      const currentIcon = driverMarkerRef.current.getIcon() as google.maps.Icon;
-      if (currentIcon && typeof currentIcon === 'object') {
-        driverMarkerRef.current.setIcon({
-          ...currentIcon,
-          rotation: (location.heading || 0) + 90,
-        });
-      }
+      driverMarkerRef.current.setIcon(createCarIcon(heading));
     } else {
       console.log('🚗 Creating driver marker at:', location);
       const driverMarker = new google.maps.Marker({
         position,
         map: googleMapRef.current,
         title: 'Driver Location',
-        icon: {
-          url: '/assets/images/vector-top-view-car-vehicle-260nw-724653760.webp',
-          scaledSize: new google.maps.Size(50, 50),
-          anchor: new google.maps.Point(25, 25),
-          rotation: (location.heading || 0) + 90,
-        },
+        icon: createCarIcon(heading),
         optimized: false,
+        zIndex: 1000,
       });
       driverMarkerRef.current = driverMarker;
     }

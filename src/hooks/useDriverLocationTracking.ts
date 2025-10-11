@@ -102,7 +102,10 @@ export function useDriverLocationTracking(
         (payload) => {
           console.log('🚗 [GPS-TRACKING] Real-time location update received:', {
             driver: driverId,
-            new: payload.new,
+            latitude: payload.new.latitude,
+            longitude: payload.new.longitude,
+            heading: payload.new.heading,
+            speed: payload.new.speed,
             timestamp: new Date().toISOString()
           });
 
