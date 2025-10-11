@@ -66,7 +66,6 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
     status: ride_data?.status
   });
   
-  // Use ride data passed from client or fetch from database
   let ride = ride_data;
   
   if (!ride) {
@@ -118,7 +117,6 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
   } else {
     console.log('📢 [DRIVER-API] Using ride data from client');
     
-    // Double-check booking type even with client data
     if (['rental', 'outstation', 'airport'].includes(ride.booking_type)) {
       console.log('🚫 [DRIVER-API] Special booking type in client data:', ride.booking_type, '- skipping driver notifications');
       return new Response(
@@ -137,7 +135,6 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
       );
     }
     
-    // Get customer info if not provided
     if (!ride.users) {
       const { data: customer } = await supabase
         .from('users')
@@ -160,7 +157,6 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
     booking_type: ride.booking_type
   });
 
-  // Find online drivers with matching vehicle type
   console.log('🔍 [DRIVER-API] ===== FINDING AVAILABLE DRIVERS =====');
   console.log('🔍 [DRIVER-API] Looking for drivers with vehicle type:', ride.vehicle_type);
   console.log('🔍 [DRIVER-API] Required criteria:', {
@@ -243,17 +239,13 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
     });
   }
 
-  // Filter drivers by vehicle type
   console.log('🔍 [DRIVER-API] ===== FILTERING DRIVERS BY VEHICLE TYPE =====');
   console.log('🔍 [DRIVER-API] Requested vehicle type from ride:', ride.vehicle_type);
   console.log('🔍 [DRIVER-API] Vehicle type data type:', typeof ride.vehicle_type);
   console.log('🔍 [DRIVER-API] Vehicle type length:', ride.vehicle_type?.length);
   console.log('🔍 [DRIVER-API] Vehicle type trimmed:', ride.vehicle_type?.trim());
 
-  // Define compatible vehicle types - STRICT MATCHING
-  // Each vehicle type ONLY matches with itself and its AC variant
   const getCompatibleVehicleTypes = (requestedType: string) => {
-    // Normalize the requested type
     const normalizedType = requestedType?.trim().toLowerCase();
 
     console.log('🎯 [DRIVER-API] Normalizing requested type:', {
@@ -366,7 +358,6 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
     console.log('⚠️ [DRIVER-API] Updating ride status to no_drivers_available');
     console.log('⚠️ [DRIVER-API] Reason: No drivers found with vehicle type:', ride.vehicle_type);
     
-    // Update ride status to no_drivers_available
     const { error: updateError } = await supabase
       .from('rides')
       .update({ status: 'no_drivers_available' })
@@ -394,7 +385,6 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
     );
   }
 
-  // Get live locations for these drivers
   console.log('📍 [DRIVER-API] ===== GETTING DRIVER LOCATIONS =====');
   console.log('📍 [DRIVER-API] Getting live locations for', filteredDrivers.length, 'drivers...');
   const driverUserIds = filteredDrivers.map(d => d.user_id);
@@ -404,7 +394,7 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
     .from('live_locations')
     .select('user_id, latitude, longitude, updated_at')
     .in('user_id', driverUserIds)
-    .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()); // Last 5 minutes
+    .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
 
   if (locationsError) {
     console.error('❌ [DRIVER-API] Error fetching driver locations:', locationsError);
@@ -424,13 +414,12 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
 
   console.log(`📍 [DRIVER-API] Found ${locations?.length || 0} recent driver locations (within 5 minutes)`);
 
-  // Create notifications for all matching drivers (don't filter by distance for now)
   console.log('📢 [DRIVER-API] ===== CREATING DRIVER NOTIFICATIONS =====');
   console.log('📢 [DRIVER-API] Creating notifications for', filteredDrivers.length, 'matching drivers...');
   
   const notifications = filteredDrivers.map(driver => {
     const location = locations?.find(loc => loc.user_id === driver.user_id);
-    let distance = 5; // Default distance
+    let distance = 5;
     
     if (location) {
       distance = calculateDistance(
@@ -441,176 +430,66 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
       );
     }
     
-    console.log(`📢 [DRIVER-API] Creating notification for driver ${driver.users?.full_name}:`, {
-      user_id: driver.user_id,
-      has_location: !!location,
-      distance_km: distance.toFixed(2),
-      pickup_address: ride.pickup_address,
-      fare_amount: ride.fare_amount,
-      vehicle_match: `${driver.vehicles?.vehicle_type} matches ${ride.vehicle_type}`
-    });
+    const eta = Math.max(2, Math.round(distance * 3));
     
     return {
-    user_id: driver.user_id,
-    type: 'ride_request',
-    title: 'New Ride Request',
-      message: `Pickup: ${ride.pickup_address} • ${distance.toFixed(1)}km away`,
-    data: {
-      // Primary ride ID fields (driver app expects these exact field names)
-      ride_id: ride.id ? String(ride.id) : '',
-      rideId: ride.id ? String(ride.id) : '',
-      id: ride.id ? String(ride.id) : '',
-      
-      // Customer information
-      customer_id: ride.customer_id,
-      customerId: ride.customer_id,
-      customer_name: ride.users?.full_name || 'Customer',
-      customerName: ride.users?.full_name || 'Customer',
-      customer_phone: ride.users?.phone_number,
-      customerPhone: ride.users?.phone_number,
-      
-      // Location information
-      pickup_address: ride.pickup_address,
-      pickupLocation: ride.pickup_address,
-      pickup_latitude: ride.pickup_latitude,
-      pickup_longitude: ride.pickup_longitude,
-      pickupCoords: {
-        latitude: ride.pickup_latitude,
-        longitude: ride.pickup_longitude,
-      },
-      
-      destination_address: ride.destination_address,
-      destinationLocation: ride.destination_address,
-      destination_latitude: ride.destination_latitude,
-      destination_longitude: ride.destination_longitude,
-      destinationCoords: ride.destination_latitude ? {
-        latitude: ride.destination_latitude,
-        longitude: ride.destination_longitude,
-      } : null,
-      
-      // Vehicle and fare information
-      vehicle_type: ride.vehicle_type,
-      vehicleType: ride.vehicle_type,
-      fare_amount: ride.fare_amount,
-      fareAmount: ride.fare_amount,
-      
-      // Booking information
-      booking_type: ride.booking_type,
-      bookingType: ride.booking_type,
-      status: ride.status,
-      
-      // Distance and ETA
+      user_id: driver.user_id,
+      type: 'ride_request',
+      title: 'New Ride Request',
+      message: `Pickup: ${ride.pickup_address}${distance ? ` • ${distance.toFixed(1)}km away` : ''}`,
+      data: {
+        rideId: ride.id,
+        pickupLocation: ride.pickup_address,
+        destinationLocation: ride.destination_address,
+        fareAmount: ride.fare_amount,
+        vehicleType: ride.vehicle_type,
         distance: distance,
-        eta: Math.round(distance * 2),
-      
-      // Timestamps
-      created_at: ride.created_at,
-      createdAt: ride.created_at,
-    },
-    status: 'unread',
+        eta: eta,
+        pickupCoords: {
+          latitude: ride.pickup_latitude,
+          longitude: ride.pickup_longitude,
+        },
+        destinationCoords: ride.destination_latitude ? {
+          latitude: ride.destination_latitude,
+          longitude: ride.destination_longitude,
+        } : null,
+      },
+      status: 'unread',
     };
   });
 
-  console.log('📢 [DRIVER-API] ===== NOTIFICATION CREATION SUMMARY =====');
-  console.log(`📢 [DRIVER-API] Total notifications to create: ${notifications.length}`);
-  console.log('📢 [DRIVER-API] Notification summary:', notifications.map((n, index) => ({
-    notification_number: index + 1,
-    driver_user_id: n.user_id,
-    notification_type: n.type,
-    title: n.title,
-    message: n.message,
-    ride_id: n.data.rideId,
-    distance: n.data.distance?.toFixed(2) + 'km',
-    eta: n.data.eta + 'min'
-  })));
+  const { data: insertedNotifications, error: notificationsError } = await supabase
+    .from('notifications')
+    .insert(notifications)
+    .select();
 
-  if (notifications.length > 0) {
-    console.log('📢 [DRIVER-API] ===== INSERTING NOTIFICATIONS INTO DATABASE =====');
-    const { error: notificationError } = await supabase
-      .from('notifications')
-      .insert(notifications);
-
-    if (notificationError) {
-      console.error('❌ [DRIVER-API] Error creating notifications:', notificationError);
-      console.error('❌ [DRIVER-API] Notification error details:', JSON.stringify(notificationError, null, 2));
-      console.error('❌ [DRIVER-API] Failed notifications data:', JSON.stringify(notifications, null, 2));
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Failed to create notifications',
-          notificationError,
-          notifications_attempted: notifications.length
-        }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
-    }
-
-    console.log(`✅ [DRIVER-API] Successfully created ${notifications.length} driver notifications in database`);
-    
-    // Verify notifications were created
-    console.log('🔍 [DRIVER-API] ===== VERIFYING NOTIFICATIONS IN DATABASE =====');
-    const { data: createdNotifications, error: verifyError } = await supabase
-      .from('notifications')
-      .select('id, user_id, type, title, created_at')
-      .eq('type', 'ride_request')
-      .contains('data', { rideId: ride.id })
-      .order('created_at', { ascending: false });
-    
-    if (verifyError) {
-      console.error('❌ [DRIVER-API] Error verifying notifications:', verifyError);
-    } else {
-      console.log(`✅ [DRIVER-API] Verified ${createdNotifications?.length || 0} notifications exist in database`);
-      console.log('📋 [DRIVER-API] Database verification - created notifications:', createdNotifications?.map((n, index) => ({
-        verification_number: index + 1,
-        id: n.id,
-        user_id: n.user_id,
-        type: n.type,
-        title: n.title,
-        created_at: n.created_at,
-        age_seconds: Math.round((Date.now() - new Date(n.created_at).getTime()) / 1000)
-      })));
-    }
-  } else {
-    console.log('⚠️ [DRIVER-API] ===== NO DRIVERS TO NOTIFY =====');
-    console.log('⚠️ [DRIVER-API] No matching drivers found - updating ride status to no_drivers_available');
-    // No drivers available - update ride status
-    const { error: updateError } = await supabase
-      .from('rides')
-      .update({ status: 'no_drivers_available' })
-      .eq('id', ride_id);
-
-    if (updateError) {
-      console.error('❌ [DRIVER-API] Error updating ride status to no_drivers_available:', updateError);
-    } else {
-      console.log('✅ [DRIVER-API] Successfully updated ride status to no_drivers_available');
-    }
+  if (notificationsError) {
+    console.error('❌ [DRIVER-API] Error creating notifications:', notificationsError);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: 'Error creating notifications',
+        notificationsError 
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      }
+    );
   }
 
-  console.log('📢 [DRIVER-API] ===== FINAL SUMMARY =====');
-  const finalSummary = {
-    ride_id: ride_id,
-    requested_vehicle_type: ride.vehicle_type,
-    total_drivers_in_db: drivers?.length || 0,
-    matching_drivers_found: filteredDrivers.length,
-    notifications_created: notifications.length,
-    success: notifications.length > 0,
-    timestamp: new Date().toISOString()
-  };
-  console.log('📊 [DRIVER-API] Process summary:', finalSummary);
+  console.log(`✅ [DRIVER-API] Successfully created ${insertedNotifications?.length || 0} notifications`);
+  console.log('📢 [DRIVER-API] ===== NOTIFICATION PROCESS COMPLETE =====');
 
   return new Response(
     JSON.stringify({ 
       success: true, 
-      drivers_notified: notifications.length,
-      total_drivers_found: filteredDrivers.length,
-      notifications_created: notifications.length,
-      debug_summary: finalSummary
+      drivers_notified: filteredDrivers.length,
+      nearby_drivers: filteredDrivers.length,
+      notifications_created: insertedNotifications?.length || 0
     }),
     {
       headers: {
@@ -622,7 +501,7 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
 }
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth's radius in kilometers
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
