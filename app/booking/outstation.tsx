@@ -140,64 +140,102 @@ export default function OutstationBookingScreen() {
 
   const loadOutstationConfigs = async () => {
     try {
-      console.log('📊 Loading outstation configs from database...');
-      
+      console.log('🚗 [OUTSTATION] ========== LOADING VEHICLE CONFIGS ==========');
+      console.log('🚗 [OUTSTATION] Fetching from outstation_packages and outstation_fares tables...');
+
       // Get both outstation package configs and per-km configs
       const [packageConfigs, perKmConfigs] = await Promise.all([
         supabase.from('outstation_packages').select('*').eq('is_active', true),
         supabase.from('outstation_fares').select('*').eq('is_active', true)
       ]);
-      
-      console.log('📊 Raw config query results:', {
-        packageConfigs: packageConfigs.data?.length || 0,
-        perKmConfigs: perKmConfigs.data?.length || 0,
-        packageVehicleTypes: packageConfigs.data?.map(c => c.vehicle_type) || [],
-        perKmVehicleTypes: perKmConfigs.data?.map(c => c.vehicle_type) || []
+
+      console.log('🚗 [OUTSTATION] Database query results:', {
+        packageConfigs: {
+          count: packageConfigs.data?.length || 0,
+          error: packageConfigs.error,
+          vehicleTypes: packageConfigs.data?.map(c => c.vehicle_type) || []
+        },
+        perKmConfigs: {
+          count: perKmConfigs.data?.length || 0,
+          error: perKmConfigs.error,
+          vehicleTypes: perKmConfigs.data?.map(c => c.vehicle_type) || []
+        }
       });
-      
+
+      // Check for errors
+      if (packageConfigs.error) {
+        console.error('❌ [OUTSTATION] Error fetching package configs:', packageConfigs.error);
+      }
+      if (perKmConfigs.error) {
+        console.error('❌ [OUTSTATION] Error fetching per-km configs:', perKmConfigs.error);
+      }
+
       // Combine configs from both tables
       const configs: any[] = [];
-      
+
       // Get unique vehicle types from both tables
       const packageVehicleTypes = packageConfigs.data?.map(c => c.vehicle_type) || [];
       const perKmVehicleTypes = perKmConfigs.data?.map(c => c.vehicle_type) || [];
       const allVehicleTypes = [...new Set([...packageVehicleTypes, ...perKmVehicleTypes])];
-      
-      console.log('📊 All vehicle types found:', allVehicleTypes);
-      
+
+      console.log('🚗 [OUTSTATION] Unique vehicle types found:', allVehicleTypes);
+
+      if (allVehicleTypes.length === 0) {
+        console.warn('⚠️ [OUTSTATION] No vehicle types found in database, will use fallback');
+        throw new Error('No vehicle types found');
+      }
+
       for (const vehicleType of allVehicleTypes) {
         const packageConfig = packageConfigs.data?.find(c => c.vehicle_type === vehicleType);
         const perKmConfig = perKmConfigs.data?.find(c => c.vehicle_type === vehicleType);
-        
-        configs.push({
+
+        const config = {
           vehicle_type: vehicleType,
           hasSlabSystem: !!packageConfig?.use_slab_system,
-          per_km_rate: perKmConfig?.per_km_rate || 14,
-          driver_allowance_per_day: perKmConfig?.driver_allowance_per_day || packageConfig?.driver_allowance_per_day || 300,
+          per_km_rate: parseFloat(perKmConfig?.per_km_rate?.toString() || '14'),
+          driver_allowance_per_day: parseFloat(
+            perKmConfig?.driver_allowance_per_day?.toString() ||
+            packageConfig?.driver_allowance_per_day?.toString() ||
+            '300'
+          ),
           packageConfig,
           perKmConfig
+        };
+
+        console.log(`✅ [OUTSTATION] ${vehicleType}:`, {
+          hasSlabSystem: config.hasSlabSystem,
+          per_km_rate: config.per_km_rate,
+          driver_allowance: config.driver_allowance_per_day,
+          hasPackageConfig: !!packageConfig,
+          hasPerKmConfig: !!perKmConfig
         });
+
+        configs.push(config);
       }
-      
-      console.log('📊 Loaded outstation configs:', configs.length);
-      console.log('📊 Vehicle types available:', configs.map(c => c.vehicle_type));
+
+      console.log('✅ [OUTSTATION] Total configs loaded:', configs.length);
+      console.log('✅ [OUTSTATION] Vehicle types:', configs.map(c => c.vehicle_type).join(', '));
+      console.log('✅ [OUTSTATION] ========== CONFIGS LOADED SUCCESSFULLY ==========');
+
       setOutstationConfigs(configs);
     } catch (error) {
-      console.error('Error loading outstation configs:', error);
-      
+      console.error('❌ [OUTSTATION] Error loading configs:', error);
+      console.log('⚠️ [OUTSTATION] Using fallback vehicle configs');
+
       // Fallback to default vehicle types if database fails
       const fallbackConfigs = [
-        { vehicle_type: 'hatchback', per_km_rate: 10, driver_allowance_per_day: 300 },
-        { vehicle_type: 'hatchback_ac', per_km_rate: 12, driver_allowance_per_day: 300 },
-        { vehicle_type: 'sedan', per_km_rate: 14, driver_allowance_per_day: 300 },
-        { vehicle_type: 'sedan_ac', per_km_rate: 16, driver_allowance_per_day: 300 },
-        { vehicle_type: 'suv', per_km_rate: 18, driver_allowance_per_day: 300 },
-        { vehicle_type: 'suv_ac', per_km_rate: 20, driver_allowance_per_day: 300 },
+        { vehicle_type: 'hatchback', per_km_rate: 10, driver_allowance_per_day: 300, hasSlabSystem: false },
+        { vehicle_type: 'hatchback_ac', per_km_rate: 12, driver_allowance_per_day: 300, hasSlabSystem: false },
+        { vehicle_type: 'sedan', per_km_rate: 14, driver_allowance_per_day: 300, hasSlabSystem: false },
+        { vehicle_type: 'sedan_ac', per_km_rate: 16, driver_allowance_per_day: 300, hasSlabSystem: false },
+        { vehicle_type: 'suv', per_km_rate: 18, driver_allowance_per_day: 300, hasSlabSystem: false },
+        { vehicle_type: 'suv_ac', per_km_rate: 20, driver_allowance_per_day: 300, hasSlabSystem: false },
       ];
-      
-      console.log('📊 Using fallback configs:', fallbackConfigs.length);
+
+      console.log('📊 [OUTSTATION] Fallback configs set:', fallbackConfigs.length, 'vehicles');
       setOutstationConfigs(fallbackConfigs);
     } finally {
+      console.log('🏁 [OUTSTATION] Config loading complete, setting configsLoading to false');
       setConfigsLoading(false);
     }
   };
