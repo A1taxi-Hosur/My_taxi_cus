@@ -93,6 +93,8 @@ export default function TestGPSTrackingScreen() {
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+      console.log('🔧 Edge function URL will be:', `${supabaseUrl}/functions/v1/simulate-driver-movement`);
+
       setSimulationStatus('Initializing driver location...');
 
       const { error: initError } = await supabase
@@ -131,8 +133,11 @@ export default function TestGPSTrackingScreen() {
 
       console.log('📦 Simulation payload:', simulationPayload);
 
-      fetch(
-        `${supabaseUrl}/functions/v1/simulate-driver-movement`,
+      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/simulate-driver-movement`;
+      console.log('🌐 Calling edge function:', edgeFunctionUrl);
+
+      const fetchPromise = fetch(
+        edgeFunctionUrl,
         {
           method: 'POST',
           headers: {
@@ -141,21 +146,31 @@ export default function TestGPSTrackingScreen() {
           },
           body: JSON.stringify(simulationPayload),
         }
-      ).then(async (response) => {
-        console.log('📨 Edge function response status:', response.status);
+      );
+
+      console.log('⏳ Fetch initiated, waiting for response...');
+
+      fetchPromise.then(async (response) => {
+        console.log('📨 Edge function response received! Status:', response.status);
         const result = await response.json();
+        console.log('📦 Response body:', result);
         if (response.ok) {
-          console.log('✅ Simulation completed:', result);
+          console.log('✅ Simulation completed successfully:', result);
           setSimulationStatus('✅ Simulation completed!');
           Alert.alert('Success', 'GPS simulation completed successfully!');
         } else {
-          console.error('❌ Simulation failed:', result);
+          console.error('❌ Simulation failed with status', response.status, ':', result);
           setSimulationStatus('❌ Simulation failed');
           Alert.alert('Error', result.error || 'Simulation failed');
         }
         setIsSimulating(false);
       }).catch((error) => {
-        console.error('❌ Edge function error:', error);
+        console.error('❌ Edge function fetch error:', error);
+        console.error('❌ Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
         setSimulationStatus(`❌ Error: ${error.message}`);
         Alert.alert('Error', error.message || 'Failed to start simulation');
         setIsSimulating(false);
