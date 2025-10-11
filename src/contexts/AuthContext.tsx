@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Session, AuthError } from '@supabase/supabase-js';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../utils/supabase';
 
 interface AuthContextType {
@@ -12,6 +13,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: AuthError | null }>;
   sendOTP: (phoneNumber: string, name: string) => Promise<{ error: Error | null }>;
   verifyOTP: (phoneNumber: string, otp: string) => Promise<{ error: Error | null }>;
+  setAuthenticatedUser: (userData: any) => void;
   signOut: () => Promise<void>;
 }
 
@@ -47,12 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       setLoading(true);
       try {
+        // Always check Supabase session first to ensure we have a valid UUID
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
         if (error) {
           console.error('Error getting session:', error);
-          // If there's an error getting the session (like invalid refresh token),
-          // clear the corrupted session data
           if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
             const keysToRemove = [];
             for (let i = 0; i < localStorage.length; i++) {
@@ -67,13 +68,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
         } else {
           setSession(session);
-          // Use session user data directly instead of fetching from database
           setUser(session?.user ? {
             id: session.user.id,
             email: session.user.email,
             full_name: session.user.user_metadata?.full_name || 'User',
             phone_number: session.user.user_metadata?.phone_number,
-            role: 'customer'
+            role: 'customer',
+            customer_id: session.user.id // Use the same UUID from Supabase auth
           } : null);
         }
       } catch (error) {
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setUser(null);
       }
-      
+
       if (mountedRef.current) {
         setLoading(false);
       }
@@ -96,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: session.user.id,
           email: session.user.email,
           full_name: session.user.user_metadata?.full_name || 'User',
+          customer_id: session.user.id, // Use the same UUID from Supabase auth
           phone_number: session.user.user_metadata?.phone_number,
           role: 'customer'
         } : null);
@@ -172,75 +174,124 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const sendOTP = async (phoneNumber: string, name: string) => {
     try {
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-otp`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ phoneNumber, name }),
-        }
-      );
+      console.log('📱 ===== SEND OTP STARTING =====');
+      console.log('📱 Phone Number:', phoneNumber);
+      console.log('📱 Name:', name);
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      console.log('📱 Supabase URL:', supabaseUrl);
+      console.log('📱 Anon Key exists:', !!supabaseKey);
+
+      const requestUrl = `${supabaseUrl}/functions/v1/send-otp`;
+      console.log('📱 Request URL:', requestUrl);
+
+      console.log('📱 Making fetch request...');
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          phoneNumber,
+          name,
+        }),
+      });
+
+      console.log('📱 Response status:', response.status);
+      console.log('📱 Response ok:', response.ok);
 
       const data = await response.json();
+      console.log('📱 Response data:', JSON.stringify(data, null, 2));
 
       if (!response.ok) {
+        console.error('📱 ❌ OTP send failed:', data.error);
         return { error: new Error(data.error || 'Failed to send OTP') };
       }
 
-      return { error: null };
+      console.log('📱 ✅ OTP sent successfully!');
+      console.log('📱 Dev OTP:', data.devOtp);
+      console.log('📱 SMS Sent:', data.smsSent);
+      console.log('📱 SMS Error:', data.smsError);
+      console.log('📱 ===== SEND OTP COMPLETE =====');
+
+      return { error: null, otp: data.devOtp, smsSent: data.smsSent, smsError: data.smsError };
     } catch (error) {
-      console.error('Error sending OTP:', error);
+      console.error('📱 ❌ Error sending OTP:', error);
+      console.error('📱 Error details:', error);
       return { error: error as Error };
     }
   };
 
   const verifyOTP = async (phoneNumber: string, otp: string) => {
     try {
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/verify-otp`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ phoneNumber, otp }),
-        }
-      );
+      console.log('🔐 Verifying OTP for:', phoneNumber);
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber,
+          otp,
+        }),
+      });
 
       const data = await response.json();
+      console.log('📦 Verify OTP response:', data);
 
       if (!response.ok) {
+        console.error('❌ OTP verification failed:', data.error);
         return { error: new Error(data.error || 'Failed to verify OTP') };
       }
 
-      if (data.sessionUrl) {
-        const { error } = await supabase.auth.verifyOtp({
-          type: 'magiclink',
-          token_hash: data.sessionUrl.split('#')[1]?.split('&')[0]?.split('=')[1] || '',
-          email: `${phoneNumber.replace(/\+/g, '')}@a1taxi.app`,
+      if (data.success && data.customerId) {
+        console.log('✅ User verified successfully!');
+        console.log('✅ User ID:', data.userId);
+        console.log('✅ Customer ID:', data.customerId);
+
+        setUser({
+          id: data.userId,
+          email: data.user.email,
+          full_name: data.user.user_metadata?.full_name || 'User',
+          phone_number: data.user.user_metadata?.phone_number,
+          role: 'customer',
+          customer_id: data.customerId
         });
 
-        if (error) {
-          return { error };
-        }
+        console.log('✅ User data set, verification complete');
+      } else {
+        console.error('❌ Invalid response from server');
+        return { error: new Error('Authentication failed: Invalid response') };
       }
 
+      console.log('✅ OTP verification complete');
       return { error: null };
     } catch (error) {
-      console.error('Error verifying OTP:', error);
+      console.error('❌ Error verifying OTP:', error);
       return { error: error as Error };
     }
+  };
+
+  const setAuthenticatedUser = (userData: any) => {
+    console.log('✅ Setting authenticated user in context:', userData);
+    setUser(userData);
   };
 
   const signOut = async () => {
     try {
       console.log('🚪 Starting sign out process...');
-      
-      // Clear all Supabase-related session data from storage
+
+      // Clear old AsyncStorage keys (no longer used)
+      await AsyncStorage.removeItem('isAuthenticated');
+      await AsyncStorage.removeItem('customerId');
+      await AsyncStorage.removeItem('customerName');
+      await AsyncStorage.removeItem('customerPhone');
+
       if (Platform.OS === 'web') {
-        // Clear localStorage on web
         if (typeof localStorage !== 'undefined') {
           const keysToRemove = [];
           for (let i = 0; i < localStorage.length; i++) {
@@ -251,20 +302,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           keysToRemove.forEach(key => localStorage.removeItem(key));
         }
-      } else {
-        // For React Native, we would use AsyncStorage, but since this is web-focused
-        // we'll handle it in the Supabase signOut call
       }
-      
-      // Then sign out from Supabase
+
       const { error } = await supabase.auth.signOut();
-      
+
       if (error) {
         console.error('Supabase sign out error:', error);
-        // Even if signOut fails, clear local state to prevent stuck sessions
       }
-      
-      // Clear local state after Supabase sign out
+
       setSession(null);
       setUser(null);
       
@@ -304,6 +349,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     sendOTP,
     verifyOTP,
+    setAuthenticatedUser,
     signOut,
   };
 

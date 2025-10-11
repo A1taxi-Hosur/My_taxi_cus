@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
 interface RideRequestPayload {
@@ -36,12 +36,18 @@ Deno.serve(async (req: Request) => {
     const { createClient } = await import('npm:@supabase/supabase-js@2.56.1');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    if (path === '/send-ride-request' && req.method === 'POST') {
-      return await sendRideRequestNotifications(req, supabase);
-    } else if (path === '/send-status-update' && req.method === 'POST') {
-      return await sendStatusUpdateNotification(req, supabase);
-    } else if (path === '/cancel-ride-requests' && req.method === 'POST') {
-      return await cancelRideRequestNotifications(req, supabase);
+    if (req.method === 'POST') {
+      const body = await req.json();
+
+      if (body.action === 'send-otp') {
+        return await sendOTP(body, supabase);
+      } else if (path === '/send-ride-request') {
+        return await sendRideRequestNotifications(body, supabase);
+      } else if (path === '/send-status-update') {
+        return await sendStatusUpdateNotification(body, supabase);
+      } else if (path === '/cancel-ride-requests') {
+        return await cancelRideRequestNotifications(body, supabase);
+      }
     }
 
     return new Response(
@@ -69,8 +75,117 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function sendRideRequestNotifications(req: Request, supabase: any) {
-  const { rideId, driverUserIds, rideData }: RideRequestPayload = await req.json();
+async function sendOTP(body: any, supabase: any) {
+  const { phoneNumber, name } = body;
+
+  if (!phoneNumber || !name) {
+    return new Response(
+      JSON.stringify({ error: 'Phone number and name are required' }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      }
+    );
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  const { error: insertError } = await supabase
+    .from('otp_verifications')
+    .insert({
+      phone_number: phoneNumber,
+      otp_code: otp,
+      name: name,
+      expires_at: expiresAt.toISOString(),
+      verified: false,
+    });
+
+  if (insertError) {
+    console.error('Error storing OTP:', insertError);
+    return new Response(
+      JSON.stringify({ error: 'Failed to generate OTP' }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      }
+    );
+  }
+
+  const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+  const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const twilioPhoneNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
+
+  if (twilioAccountSid && twilioAuthToken && twilioPhoneNumber) {
+    try {
+      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
+      const auth = btoa(`${twilioAccountSid}:${twilioAuthToken}`);
+
+      const twilioResponse = await fetch(twilioUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          To: phoneNumber,
+          From: twilioPhoneNumber,
+          Body: `Your A1 Taxi verification code is: ${otp}. Valid for 10 minutes.`,
+        }),
+      });
+
+      if (!twilioResponse.ok) {
+        const twilioError = await twilioResponse.json();
+        console.error('Twilio error:', twilioError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to send SMS' }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders,
+            },
+          }
+        );
+      }
+
+      console.log(`OTP sent successfully to ${phoneNumber}`);
+    } catch (twilioError) {
+      console.error('Error sending SMS via Twilio:', twilioError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to send SMS' }),
+        {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+  } else {
+    console.log(`[DEV MODE] OTP for ${phoneNumber}: ${otp}`);
+  }
+
+  return new Response(
+    JSON.stringify({ success: true, message: 'OTP sent successfully' }),
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    }
+  );
+}
+
+async function sendRideRequestNotifications(body: any, supabase: any) {
+  const { rideId, driverUserIds, rideData }: RideRequestPayload = body;
   
   console.log(`Sending ride request notifications for ride ${rideId} to ${driverUserIds.length} drivers`);
   
@@ -118,8 +233,8 @@ async function sendRideRequestNotifications(req: Request, supabase: any) {
   );
 }
 
-async function sendStatusUpdateNotification(req: Request, supabase: any) {
-  const { userId, type, title, message, data }: NotificationPayload = await req.json();
+async function sendStatusUpdateNotification(body: any, supabase: any) {
+  const { userId, type, title, message, data }: NotificationPayload = body;
   
   console.log(`Sending ${type} notification to user: ${userId}`);
   
@@ -149,8 +264,8 @@ async function sendStatusUpdateNotification(req: Request, supabase: any) {
   );
 }
 
-async function cancelRideRequestNotifications(req: Request, supabase: any) {
-  const { rideId, acceptedDriverUserId } = await req.json();
+async function cancelRideRequestNotifications(body: any, supabase: any) {
+  const { rideId, acceptedDriverUserId } = body;
   
   console.log(`Cancelling ride request notifications for ride: ${rideId}, except driver: ${acceptedDriverUserId}`);
   

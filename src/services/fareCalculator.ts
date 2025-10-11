@@ -915,8 +915,11 @@ class FareCalculator {
         return cached.route;
       }
 
-      console.log('🗺️ Fetching fresh route info from Google Maps Directions API...');
-      
+      console.log('🗺️ [ROUTE-INFO] ===== FETCHING ROUTE INFORMATION =====');
+      console.log('🗺️ [ROUTE-INFO] Pickup:', pickup);
+      console.log('🗺️ [ROUTE-INFO] Destination:', destination);
+      console.log('🗺️ [ROUTE-INFO] Attempting Google Maps Directions API...');
+
       // Try Google Directions API first
       const directions = await googleMapsService.getDirections(
         { lat: pickup.latitude, lng: pickup.longitude },
@@ -925,19 +928,30 @@ class FareCalculator {
 
       let routeInfo;
       if (directions) {
-        console.log('✅ Google Directions API successful:', {
-          distance_text: directions.distance.text,
-          distance_km: (directions.distance.value / 1000).toFixed(2),
-          duration_text: directions.duration.text,
-          duration_minutes: (directions.duration.value / 60).toFixed(1)
+        console.log('✅ [ROUTE-INFO] ===== GOOGLE DIRECTIONS API SUCCESS =====');
+        console.log('✅ [ROUTE-INFO] Using REAL ROAD DISTANCE from Google Maps');
+        console.log('✅ [ROUTE-INFO] Distance:', {
+          text: directions.distance.text,
+          meters: directions.distance.value,
+          kilometers: (directions.distance.value / 1000).toFixed(2) + 'km',
+          source: 'Google Directions API (ROAD DISTANCE)'
         });
-        
+        console.log('✅ [ROUTE-INFO] Duration:', {
+          text: directions.duration.text,
+          seconds: directions.duration.value,
+          minutes: (directions.duration.value / 60).toFixed(1) + ' min',
+          source: 'Google Directions API (ACTUAL TRAVEL TIME)'
+        });
+
         routeInfo = {
           distance: directions.distance.value / 1000, // Convert to km
           duration: directions.duration.value / 60, // Convert to minutes
         };
       } else {
-        console.warn('⚠️ Google Directions API failed, using haversine fallback');
+        console.warn('⚠️ [ROUTE-INFO] ===== GOOGLE DIRECTIONS API FAILED =====');
+        console.warn('⚠️ [ROUTE-INFO] Falling back to straight-line (Haversine) distance');
+        console.warn('⚠️ [ROUTE-INFO] This will be LESS ACCURATE than road distance');
+
         // Fallback to haversine calculation
         const distance = enhancedLocationService.calculateHaversineDistance(
           pickup.latitude,
@@ -945,12 +959,18 @@ class FareCalculator {
           destination.latitude,
           destination.longitude
         );
-        console.log('📏 Haversine fallback distance:', distance.toFixed(2) + 'km');
+        console.log('📏 [ROUTE-INFO] Haversine (straight-line) distance:', distance.toFixed(2) + 'km');
+        console.log('📏 [ROUTE-INFO] Note: This is NOT the road distance!');
+
         routeInfo = {
           distance,
           duration: (distance / 30) * 60, // Assume 30 km/h average speed
         };
       }
+
+      console.log('🗺️ [ROUTE-INFO] ===== FINAL ROUTE INFO =====');
+      console.log('🗺️ [ROUTE-INFO] Distance used for fare:', routeInfo.distance.toFixed(2) + 'km');
+      console.log('🗺️ [ROUTE-INFO] Duration used for fare:', routeInfo.duration.toFixed(1) + ' min');
 
       // Cache the result
       this.routeCache.set(cacheKey, {
