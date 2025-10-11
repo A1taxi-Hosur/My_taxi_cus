@@ -721,7 +721,7 @@ export default function OutstationBookingScreen() {
                   {outstationConfigs.map((config) => {
                     const isSelected = selectedVehicle === config.vehicle_type;
                     const vehicleFare = calculatedFares[config.vehicle_type];
-                    
+
                     return (
                       <TouchableOpacity
                         key={config.vehicle_type}
@@ -738,29 +738,20 @@ export default function OutstationBookingScreen() {
                         ]}>
                           <Text style={styles.vehicleEmoji}>🚗</Text>
                         </View>
-                        
+
                         <Text style={[
                           styles.vehicleName,
                           isSelected && styles.selectedVehicleText,
                         ]}>
                           {formatVehicleName(config.vehicle_type)}
                         </Text>
-                        
+
                         <Text style={[
-                          styles.vehicleDescription,
+                          styles.vehicleFare,
                           isSelected && styles.selectedVehicleText,
                         ]}>
-                          {getVehicleDescription(config.vehicle_type)}
+                          {vehicleFare ? `₹${vehicleFare.toLocaleString('en-IN')}` : 'Calculating...'}
                         </Text>
-                        
-                        {vehicleFare && (
-                          <Text style={[
-                            styles.vehicleFare,
-                            isSelected && styles.selectedVehicleText,
-                          ]}>
-                            ₹{vehicleFare.toLocaleString('en-IN')}
-                          </Text>
-                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -1011,7 +1002,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#059669',
-    marginTop: 4,
+    marginTop: 8,
+    textAlign: 'center',
   },
   loadingVehiclesContainer: {
     flexDirection: 'row',
