@@ -956,21 +956,31 @@ export default function HomeScreen() {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
       if (typeof user.id === 'string' && !uuidRegex.test(user.id)) {
-        console.log('⚠️ User ID is not a valid UUID, fetching correct UUID from Customers table...');
+        console.log('⚠️ User ID is not a valid UUID, fetching correct UUID via edge function...');
         console.log('⚠️ Invalid user.id:', user.id);
 
         try {
-          const { data: customerData, error: customerError } = await supabase
-            .from('Customers')
-            .select('user_id')
-            .eq('id', user.id)
-            .maybeSingle();
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-          if (customerData && customerData.user_id) {
-            actualCustomerId = customerData.user_id;
-            console.log('✅ Found correct UUID from Customers table:', actualCustomerId);
+          const response = await fetch(`${supabaseUrl}/functions/v1/get-customer-uuid`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({ customerId: user.id }),
+          });
+
+          const result = await response.json();
+
+          console.log('📊 Customer UUID lookup result:', result);
+
+          if (response.ok && result.user_id) {
+            actualCustomerId = result.user_id;
+            console.log('✅ Found correct UUID via edge function:', actualCustomerId);
           } else {
-            console.error('❌ Failed to fetch correct UUID:', customerError);
+            console.error('❌ Failed to fetch correct UUID:', result.error);
             showCustomAlert('Error', 'Failed to validate user account. Please sign out and sign back in.', 'error');
             setLoading(false);
             return;
@@ -982,21 +992,31 @@ export default function HomeScreen() {
           return;
         }
       } else if (typeof user.id === 'number') {
-        console.log('⚠️ User ID is a number, converting and fetching correct UUID from Customers table...');
+        console.log('⚠️ User ID is a number, fetching correct UUID via edge function...');
         console.log('⚠️ Numeric user.id:', user.id);
 
         try {
-          const { data: customerData, error: customerError } = await supabase
-            .from('Customers')
-            .select('user_id')
-            .eq('id', user.id)
-            .maybeSingle();
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-          if (customerData && customerData.user_id) {
-            actualCustomerId = customerData.user_id;
-            console.log('✅ Found correct UUID from Customers table:', actualCustomerId);
+          const response = await fetch(`${supabaseUrl}/functions/v1/get-customer-uuid`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({ customerId: user.id }),
+          });
+
+          const result = await response.json();
+
+          console.log('📊 Customer UUID lookup result:', result);
+
+          if (response.ok && result.user_id) {
+            actualCustomerId = result.user_id;
+            console.log('✅ Found correct UUID via edge function:', actualCustomerId);
           } else {
-            console.error('❌ Failed to fetch correct UUID:', customerError);
+            console.error('❌ Failed to fetch correct UUID:', result.error);
             showCustomAlert('Error', 'Failed to validate user account. Please sign out and sign back in.', 'error');
             setLoading(false);
             return;
