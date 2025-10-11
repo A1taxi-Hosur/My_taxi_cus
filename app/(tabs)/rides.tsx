@@ -264,6 +264,7 @@ export default function RidesScreen() {
       
       console.log('🔍 [RIDES] Step 2: Fetching active scheduled bookings via edge function...');
 
+      let scheduledBookings = [];
       const bookingsResponse = await fetch(`${supabaseUrl}/functions/v1/get-active-bookings`, {
         method: 'POST',
         headers: {
@@ -275,7 +276,7 @@ export default function RidesScreen() {
 
       if (bookingsResponse.ok) {
         const bookingsResult = await bookingsResponse.json();
-        const scheduledBookings = bookingsResult.data;
+        scheduledBookings = bookingsResult.data || [];
 
         if (scheduledBookings && scheduledBookings.length > 0) {
           console.log('🔍 [RIDES] ✅ Found', scheduledBookings.length, 'active scheduled bookings');
