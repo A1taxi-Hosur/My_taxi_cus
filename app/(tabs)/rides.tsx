@@ -216,71 +216,56 @@ export default function RidesScreen() {
         console.error('🔍 [RIDES] Error fetching regular rides:', await response.text());
       }
       
-      console.log('🔍 [RIDES] Step 2: Fetching active scheduled bookings...');
-      const { data: scheduledBookings, error: bookingError } = await supabase
-        .from('scheduled_bookings')
-        .select(`
-          *,
-          assigned_driver:drivers!scheduled_bookings_assigned_driver_id_fkey (
-            id,
-            user_id,
-            license_number,
-            rating,
-            total_rides,
-            users!drivers_user_id_fkey (
-              full_name,
-              phone_number
-            ),
-            vehicles!fk_drivers_vehicle (
-              make,
-              model,
-              registration_number,
-              color,
-              vehicle_type
-            )
-          )
-        `)
-        .eq('customer_id', user.id)
-        .in('status', ['pending', 'assigned', 'confirmed', 'driver_arrived', 'in_progress'])
-        .order('created_at', { ascending: false });
-      
-      if (bookingError) {
-        console.error('🔍 [RIDES] Error fetching scheduled bookings:', bookingError);
-        return;
-      }
-      
-      if (scheduledBookings && scheduledBookings.length > 0) {
-        console.log('🔍 [RIDES] ✅ Found', scheduledBookings.length, 'active scheduled bookings');
-        
-        // Convert all scheduled bookings to ride format for UI compatibility
-        const convertedBookings = scheduledBookings.map(booking => ({
-          id: booking.id,
-          ride_code: `${booking.booking_type.toUpperCase().substring(0, 3)}-${booking.id.substring(0, 6).toUpperCase()}`,
-          customer_id: booking.customer_id,
-          driver_id: booking.assigned_driver_id,
-          pickup_address: booking.pickup_address,
-          pickup_latitude: booking.pickup_latitude,
-          pickup_longitude: booking.pickup_longitude,
-          destination_address: booking.destination_address,
-          destination_latitude: booking.destination_latitude,
-          destination_longitude: booking.destination_longitude,
-          status: booking.status === 'assigned' ? 'accepted' : booking.status,
-          fare_amount: booking.estimated_fare,
-          vehicle_type: booking.vehicle_type,
-          booking_type: booking.booking_type,
-          pickup_otp: booking.pickup_otp,
-          drop_otp: booking.drop_otp,
-          created_at: booking.created_at,
-          updated_at: booking.updated_at,
-          drivers: booking.assigned_driver,
-          assigned_driver: booking.assigned_driver,
-          scheduled_time: booking.scheduled_time,
-          rental_hours: booking.rental_hours,
-          special_instructions: booking.special_instructions,
-          isScheduledBooking: true,
-        }));
-        
-        allActiveRides.push(...convertedBookings);
+      console.log('🔍 [RIDES] Step 2: Fetching active scheduled bookings via edge function...');
+
+      const bookingsResponse = await fetch(`${supabaseUrl}/functions/v1/get-active-bookings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      if (bookingsResponse.ok) {
+        const bookingsResult = await bookingsResponse.json();
+        const scheduledBookings = bookingsResult.data;
+
+        if (scheduledBookings && scheduledBookings.length > 0) {
+          console.log('🔍 [RIDES] ✅ Found', scheduledBookings.length, 'active scheduled bookings');
+
+          // Convert all scheduled bookings to ride format for UI compatibility
+          const convertedBookings = scheduledBookings.map((booking: any) => ({
+            id: booking.id,
+            ride_code: `${booking.booking_type.toUpperCase().substring(0, 3)}-${booking.id.substring(0, 6).toUpperCase()}`,
+            customer_id: booking.customer_id,
+            driver_id: booking.assigned_driver_id,
+            pickup_address: booking.pickup_address,
+            pickup_latitude: booking.pickup_latitude,
+            pickup_longitude: booking.pickup_longitude,
+            destination_address: booking.destination_address,
+            destination_latitude: booking.destination_latitude,
+            destination_longitude: booking.destination_longitude,
+            status: booking.status === 'assigned' ? 'accepted' : booking.status,
+            fare_amount: booking.estimated_fare,
+            vehicle_type: booking.vehicle_type,
+            booking_type: booking.booking_type,
+            pickup_otp: booking.pickup_otp,
+            drop_otp: booking.drop_otp,
+            created_at: booking.created_at,
+            updated_at: booking.updated_at,
+            drivers: booking.assigned_driver,
+            assigned_driver: booking.assigned_driver,
+            scheduled_time: booking.scheduled_time,
+            rental_hours: booking.rental_hours,
+            special_instructions: booking.special_instructions,
+            isScheduledBooking: true,
+          }));
+
+          allActiveRides.push(...convertedBookings);
+        }
+      } else {
+        console.error('🔍 [RIDES] Error fetching scheduled bookings:', await bookingsResponse.text());
       }
       
       // Sort all rides by creation date (newest first)

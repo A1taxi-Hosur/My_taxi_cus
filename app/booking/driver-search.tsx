@@ -365,7 +365,26 @@ export default function DriverSearchScreen() {
 
         const { data: bookingData, error } = await supabase
           .from('scheduled_bookings')
-          .select('*')
+          .select(`
+            *,
+            drivers:assigned_driver_id (
+              id,
+              user_id,
+              rating,
+              total_rides,
+              users:user_id (
+                full_name,
+                phone_number
+              ),
+              vehicles:vehicle_id (
+                make,
+                model,
+                registration_number,
+                color,
+                vehicle_type
+              )
+            )
+          `)
           .eq('id', bookingId)
           .maybeSingle();
 
@@ -597,10 +616,38 @@ export default function DriverSearchScreen() {
     console.log('🚨 [DEBUG] fetchAssignedDriverDetails called with:', { driverId, hasBookingData: !!bookingData });
     try {
       console.log('🔄 [DRIVER_SEARCH] Fetching assigned driver details for driver ID:', driverId);
-      
-      // Use edge function to bypass RLS policies for driver details
+
+      // Check if we already have driver data in bookingData
+      if (bookingData?.drivers) {
+        console.log('✅ [DRIVER_SEARCH] Using driver data from booking query (already joined)');
+        const driverDetails = bookingData.drivers;
+
+        setDriverData({
+          id: driverDetails.id,
+          name: driverDetails.users?.full_name || 'Driver',
+          phone: driverDetails.users?.phone_number,
+          rating: driverDetails.rating || 5.0,
+          totalRides: driverDetails.total_rides || 0,
+          vehicle: {
+            make: driverDetails.vehicles?.make || '',
+            model: driverDetails.vehicles?.model || '',
+            registration: driverDetails.vehicles?.registration_number || '',
+            color: driverDetails.vehicles?.color || '',
+            type: driverDetails.vehicles?.vehicle_type || '',
+          },
+        });
+        setSearchStatus('found');
+        setInitialCheckComplete(true);
+
+        if (driverDetails.user_id) {
+          startDriverLocationPolling(driverDetails.user_id);
+        }
+        return;
+      }
+
+      // Fallback to edge function if driver data not in booking
       console.log('🔄 [DRIVER_SEARCH] Using edge function to fetch driver details (bypasses RLS)');
-      
+
       const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/driver-details/get-driver?driverId=${driverId}`, {
         method: 'GET',
         headers: {
@@ -608,13 +655,13 @@ export default function DriverSearchScreen() {
           'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
         },
       });
-      
+
       if (!response.ok) {
         console.error('🚨 [DEBUG] Edge function request failed:', response.status, response.statusText);
         console.error('❌ [DRIVER_SEARCH] Edge function request failed:', response.status);
         return;
       }
-      
+
       const { data: driverDetails, error: driverError } = await response.json();
 
       if (driverError || !driverDetails) {
@@ -653,13 +700,13 @@ export default function DriverSearchScreen() {
       });
       setSearchStatus('found');
       setInitialCheckComplete(true);
-      
+
       console.log('🚨 [DEBUG] Assigned driver data set, status changed to found');
-      
+
       if (driverDetails.user_id) {
         startDriverLocationPolling(driverDetails.user_id);
       }
-      
+
     } catch (error) {
       console.error('🚨 [DEBUG] Exception in fetchAssignedDriverDetails:', error);
       console.error('❌ [DRIVER_SEARCH] Error fetching assigned driver details:', error);
