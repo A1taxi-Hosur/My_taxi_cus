@@ -66,11 +66,11 @@ export function useDriverLocationTracking(
 
         if (data) {
           const location: DriverLocation = {
-            latitude: data.latitude,
-            longitude: data.longitude,
-            heading: data.heading || 0,
-            speed: data.speed || 0,
-            accuracy: data.accuracy || 0,
+            latitude: parseFloat(data.latitude),
+            longitude: parseFloat(data.longitude),
+            heading: parseFloat(data.heading) || 0,
+            speed: parseFloat(data.speed) || 0,
+            accuracy: parseFloat(data.accuracy) || 0,
             timestamp: data.updated_at,
           };
 
@@ -108,11 +108,11 @@ export function useDriverLocationTracking(
 
           const newData = payload.new as any;
           const newLocation: DriverLocation = {
-            latitude: newData.latitude,
-            longitude: newData.longitude,
-            heading: newData.heading || 0,
-            speed: newData.speed || 0,
-            accuracy: newData.accuracy || 0,
+            latitude: parseFloat(newData.latitude),
+            longitude: parseFloat(newData.longitude),
+            heading: parseFloat(newData.heading) || 0,
+            speed: parseFloat(newData.speed) || 0,
+            accuracy: parseFloat(newData.accuracy) || 0,
             timestamp: newData.updated_at,
           };
 
@@ -146,11 +146,11 @@ export function useDriverLocationTracking(
 
           const newData = payload.new as any;
           const newLocation: DriverLocation = {
-            latitude: newData.latitude,
-            longitude: newData.longitude,
-            heading: newData.heading || 0,
-            speed: newData.speed || 0,
-            accuracy: newData.accuracy || 0,
+            latitude: parseFloat(newData.latitude),
+            longitude: parseFloat(newData.longitude),
+            heading: parseFloat(newData.heading) || 0,
+            speed: parseFloat(newData.speed) || 0,
+            accuracy: parseFloat(newData.accuracy) || 0,
             timestamp: newData.updated_at,
           };
 

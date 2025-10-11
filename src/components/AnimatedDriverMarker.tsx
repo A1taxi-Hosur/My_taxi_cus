@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View, Platform } from 'react-native';
-import { Car } from 'lucide-react-native';
+import { Animated, StyleSheet, View, Platform, Image } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 interface AnimatedDriverMarkerProps {
@@ -118,11 +117,13 @@ export default function AnimatedDriverMarker({
           },
         ]}
       >
-        <View style={styles.carIcon}>
-          <Car size={28} color="#FFFFFF" strokeWidth={2.5} />
+        <View style={styles.carImageContainer}>
+          <Image
+            source={require('../../assets/images/vector-top-view-car-vehicle-260nw-724653760.webp')}
+            style={styles.carImage}
+            resizeMode="contain"
+          />
         </View>
-
-        <View style={styles.directionIndicator} />
       </Animated.View>
 
       <View style={styles.shadowContainer}>
@@ -148,40 +149,32 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   markerContainer: {
-    width: 50,
-    height: 50,
+    width: 60,
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 2,
   },
-  carIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#2563EB',
+  carImageContainer: {
+    width: 60,
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#2563EB',
     elevation: 8,
-    shadowColor: '#2563EB',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
+    overflow: 'hidden',
   },
-  directionIndicator: {
-    position: 'absolute',
-    top: -5,
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 5,
-    borderRightWidth: 5,
-    borderBottomWidth: 10,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: '#2563EB',
+  carImage: {
+    width: 50,
+    height: 50,
+    transform: [{ rotate: '90deg' }],
   },
   shadowContainer: {
     position: 'absolute',

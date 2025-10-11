@@ -47,6 +47,7 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
   const googleMapRef = useRef<google.maps.Map | null>(null);
   const directionsRenderer = useRef<google.maps.DirectionsRenderer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const driverMarkerRef = useRef<google.maps.Marker | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [userLocation, setUserLocation] = useState<any>(null);
   const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
@@ -99,7 +100,13 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
     if (isMapReady) {
       updateMarkers();
     }
-  }, [isMapReady, pickupCoords, destinationCoords, driverLocation, userLocation, availableDrivers]);
+  }, [isMapReady, pickupCoords, destinationCoords, userLocation, availableDrivers]);
+
+  useEffect(() => {
+    if (isMapReady && googleMapRef.current && driverLocation) {
+      updateDriverMarker(driverLocation);
+    }
+  }, [isMapReady, driverLocation]);
 
   useEffect(() => {
     if (isMapReady && showRoute && pickupCoords && destinationCoords) {
@@ -217,6 +224,40 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
     }
   };
 
+  const updateDriverMarker = (location: { latitude: number; longitude: number; heading?: number }) => {
+    if (!googleMapRef.current || !window.google) return;
+
+    const position = new google.maps.LatLng(location.latitude, location.longitude);
+
+    if (driverMarkerRef.current) {
+      console.log('🚗 Updating driver marker position:', location);
+      driverMarkerRef.current.setPosition(position);
+
+      const currentIcon = driverMarkerRef.current.getIcon() as google.maps.Icon;
+      if (currentIcon && typeof currentIcon === 'object') {
+        driverMarkerRef.current.setIcon({
+          ...currentIcon,
+          rotation: (location.heading || 0) + 90,
+        });
+      }
+    } else {
+      console.log('🚗 Creating driver marker at:', location);
+      const driverMarker = new google.maps.Marker({
+        position,
+        map: googleMapRef.current,
+        title: 'Driver Location',
+        icon: {
+          url: '/assets/images/vector-top-view-car-vehicle-260nw-724653760.webp',
+          scaledSize: new google.maps.Size(50, 50),
+          anchor: new google.maps.Point(25, 25),
+          rotation: (location.heading || 0) + 90,
+        },
+        optimized: false,
+      });
+      driverMarkerRef.current = driverMarker;
+    }
+  };
+
   const updateMarkers = () => {
     if (!googleMapRef.current || !window.google) return;
 
@@ -278,24 +319,7 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
       markersRef.current.push(destinationMarker);
     }
 
-    // Add driver marker (assigned driver)
-    if (driverLocation) {
-      const driverMarker = new google.maps.Marker({
-        position: { lat: driverLocation.latitude, lng: driverLocation.longitude },
-        map: googleMapRef.current,
-        title: 'Driver Location',
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 8,
-          fillColor: '#2563EB',
-          fillOpacity: 1,
-          strokeColor: '#FFFFFF',
-          strokeWeight: 2,
-          rotation: driverLocation.heading || 0,
-        },
-      });
-      markersRef.current.push(driverMarker);
-    }
+    // Driver marker is handled separately in updateDriverMarker to enable smooth animation
 
     // Add available drivers markers
     if (availableDrivers && availableDrivers.length > 0) {
