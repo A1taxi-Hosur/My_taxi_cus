@@ -218,8 +218,8 @@ export default function AirportBookingScreen() {
 
   const loadAirportFareConfigs = async () => {
     try {
-      console.log('Loading airport fare configs from airport_fares table...');
-      
+      console.log('🚕 [AIRPORT] Loading airport fare configs from airport_fares table...');
+
       const { data, error } = await supabase
         .from('airport_fares')
         .select('*')
@@ -227,24 +227,33 @@ export default function AirportBookingScreen() {
         .order('vehicle_type');
 
       if (error) {
-        console.error('Error loading airport fares:', error);
+        console.error('❌ [AIRPORT] Error loading airport fares:', error);
         throw error;
       }
 
       if (data && data.length > 0) {
-        console.log('✅ Loaded airport fares from database:', data.length);
-        console.log('✅ Airport fare details:', data.map(fare => ({
+        console.log('✅ [AIRPORT] Loaded airport fares from database:', data.length);
+
+        // Convert fare values to numbers (they might be strings from DB)
+        const normalizedData = data.map(fare => ({
+          ...fare,
+          hosur_to_airport_fare: parseFloat(fare.hosur_to_airport_fare.toString()),
+          airport_to_hosur_fare: parseFloat(fare.airport_to_hosur_fare.toString()),
+        }));
+
+        console.log('✅ [AIRPORT] Airport fare details:', normalizedData.map(fare => ({
           vehicle_type: fare.vehicle_type,
           hosur_to_airport: fare.hosur_to_airport_fare,
           airport_to_hosur: fare.airport_to_hosur_fare
         })));
-        setAirportFareConfigs(data);
+
+        setAirportFareConfigs(normalizedData);
       } else {
-        console.log('⚠️ No airport fares found, using fallback');
+        console.log('⚠️ [AIRPORT] No airport fares found in database, using fallback values');
         setAirportFareConfigs(getFallbackAirportConfigs());
       }
     } catch (error) {
-      console.error('Error loading airport fares:', error);
+      console.error('❌ [AIRPORT] Error loading airport fares, using fallback:', error);
       setAirportFareConfigs(getFallbackAirportConfigs());
     } finally {
       setConfigsLoading(false);
@@ -263,25 +272,34 @@ export default function AirportBookingScreen() {
   };
 
   const updateFixedFares = () => {
-    if (airportFareConfigs.length === 0) return;
-    
-    console.log('📊 Updating fixed fares for service type:', serviceType);
-    
+    if (airportFareConfigs.length === 0) {
+      console.log('⚠️ [AIRPORT] No airport fare configs available to update');
+      return;
+    }
+
+    console.log('📊 [AIRPORT] Updating fixed fares for service type:', serviceType);
+    console.log('📊 [AIRPORT] Available configs:', airportFareConfigs.map(c => ({
+      type: c.vehicle_type,
+      pickup: c.airport_to_hosur_fare,
+      drop: c.hosur_to_airport_fare
+    })));
+
     const newFixedFares: { [key in VehicleType]?: number } = {};
-    
+
     airportFareConfigs.forEach(config => {
       // Use the appropriate fare based on service type
-      const fare = serviceType === 'pickup' 
-        ? config.airport_to_hosur_fare 
+      // pickup = airport_to_hosur, drop = hosur_to_airport
+      const fare = serviceType === 'pickup'
+        ? config.airport_to_hosur_fare
         : config.hosur_to_airport_fare;
-      
+
       newFixedFares[config.vehicle_type] = fare;
-      
-      console.log(`${config.vehicle_type} fixed fare (${serviceType}):`, fare);
+
+      console.log(`✅ [AIRPORT] ${config.vehicle_type} ${serviceType} fare: ₹${fare}`);
     });
-    
+
     setFixedFares(newFixedFares);
-    console.log('✅ Fixed fares updated:', newFixedFares);
+    console.log('✅ [AIRPORT] All fixed fares updated:', newFixedFares);
   };
 
   const loadActiveZones = async () => {
