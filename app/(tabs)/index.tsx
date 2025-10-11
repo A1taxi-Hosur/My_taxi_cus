@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Navigation, ArrowUpDown, Menu, Clock, Plane } from 'lucide-react-native';
+import { MapPin, Navigation, ArrowUpDown, Menu, Clock, Plane, TestTube2 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -1307,6 +1307,21 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Test Animation Button */}
+          <TouchableOpacity
+            style={styles.testAnimationButton}
+            onPress={() => router.push('/test-animations')}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#8B5CF6', '#7C3AED']}
+              style={styles.testButtonGradient}
+            >
+              <TestTube2 size={20} color="#FFFFFF" />
+              <Text style={styles.testButtonText}>Test Animations</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
           {/* Service Options - Horizontal */}
           <View style={styles.servicesSection}>
             <Text style={styles.servicesTitle}>Other Services</Text>
@@ -1568,6 +1583,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
+  },
+  testAnimationButton: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  testButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  testButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
   servicesSection: {
     paddingHorizontal: 20,
