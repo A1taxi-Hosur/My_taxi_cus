@@ -60,7 +60,7 @@ const TEST_SCENARIOS = [
 
 export default function TestGPSTrackingScreen() {
   const router = useRouter();
-  const [testDriverId] = useState('test-driver-001');
+  const [testDriverId] = useState('ac79d0ad-abe4-4e7d-830e-5908cfba0681');
   const [testRideId] = useState('test-ride-001');
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationStatus, setSimulationStatus] = useState('');
