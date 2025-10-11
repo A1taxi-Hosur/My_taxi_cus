@@ -192,7 +192,8 @@ async function getRideHistory(req: Request, supabase: any) {
 
   console.log('📚 [EDGE] getRideHistory called for user:', userId);
 
-  const { data: rides, error } = await supabase
+  // Fetch regular rides
+  const { data: rides, error: ridesError } = await supabase
     .from('rides')
     .select(`
       *,
@@ -219,15 +220,88 @@ async function getRideHistory(req: Request, supabase: any) {
     .in('status', ['completed', 'cancelled', 'no_drivers_available'])
     .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('📚 [EDGE] Error fetching ride history:', error);
-    throw error;
+  if (ridesError) {
+    console.error('📚 [EDGE] Error fetching ride history:', ridesError);
+    throw ridesError;
   }
 
-  console.log('📚 [EDGE] Ride history fetched:', rides?.length || 0, 'rides');
+  console.log('📚 [EDGE] Regular rides fetched:', rides?.length || 0, 'rides');
+
+  // Fetch scheduled bookings history
+  const { data: scheduledBookings, error: bookingsError } = await supabase
+    .from('scheduled_bookings')
+    .select(`
+      *,
+      assigned_driver:drivers!scheduled_bookings_assigned_driver_id_fkey (
+        id,
+        user_id,
+        rating,
+        total_rides,
+        vehicle_id,
+        users:user_id (
+          full_name,
+          phone_number
+        ),
+        vehicles:vehicle_id (
+          make,
+          model,
+          registration_number,
+          color,
+          vehicle_type
+        )
+      )
+    `)
+    .eq('customer_id', userId)
+    .in('status', ['completed', 'cancelled'])
+    .order('created_at', { ascending: false });
+
+  if (bookingsError) {
+    console.error('📚 [EDGE] Error fetching scheduled bookings history:', bookingsError);
+    throw bookingsError;
+  }
+
+  console.log('📚 [EDGE] Scheduled bookings fetched:', scheduledBookings?.length || 0, 'bookings');
+
+  // Convert scheduled bookings to ride format for consistency
+  const convertedBookings = (scheduledBookings || []).map((booking: any) => ({
+    id: booking.id,
+    ride_code: `${booking.booking_type.toUpperCase().substring(0, 3)}-${booking.id.substring(0, 6).toUpperCase()}`,
+    customer_id: booking.customer_id,
+    driver_id: booking.assigned_driver_id,
+    pickup_address: booking.pickup_address,
+    pickup_latitude: booking.pickup_latitude,
+    pickup_longitude: booking.pickup_longitude,
+    destination_address: booking.destination_address,
+    destination_latitude: booking.destination_latitude,
+    destination_longitude: booking.destination_longitude,
+    status: booking.status,
+    fare_amount: booking.estimated_fare,
+    vehicle_type: booking.vehicle_type,
+    booking_type: booking.booking_type,
+    pickup_otp: booking.pickup_otp,
+    drop_otp: booking.drop_otp,
+    created_at: booking.created_at,
+    updated_at: booking.updated_at,
+    drivers: booking.assigned_driver,
+    scheduled_time: booking.scheduled_time,
+    rental_hours: booking.rental_hours,
+    special_instructions: booking.special_instructions,
+    cancellation_reason: booking.cancellation_reason,
+    isScheduledBooking: true,
+  }));
+
+  // Combine both arrays and sort by created_at
+  const allRides = [...(rides || []), ...convertedBookings];
+  allRides.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  console.log('📚 [EDGE] Total history rides:', {
+    regular: rides?.length || 0,
+    scheduled: convertedBookings.length,
+    total: allRides.length
+  });
 
   return new Response(
-    JSON.stringify({ data: rides, error: null }),
+    JSON.stringify({ data: allRides, error: null }),
     {
       headers: {
         'Content-Type': 'application/json',
