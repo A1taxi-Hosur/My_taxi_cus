@@ -248,22 +248,41 @@ export default function TestGPSTrackingScreen() {
                 showUserLocation={false}
                 followUserLocation={false}
               />
-
-              {driverLocation && (
-                <View style={styles.trackingOverlay}>
-                  <LiveDriverTracking
-                    driverLocation={driverLocation}
-                    pickupLocation={pickupLocation}
-                    driverInfo={{
-                      name: 'Test Driver',
-                      vehicle: 'Toyota Camry',
-                      plateNumber: 'KA 01 TEST 1234',
-                      phone: '+91 98765 43210',
-                    }}
-                  />
-                </View>
-              )}
             </View>
+
+            {driverLocation && (
+              <View style={styles.trackingInfoCard}>
+                <View style={styles.trackingBadge}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.trackingBadgeText}>LIVE TRACKING</Text>
+                </View>
+
+                <View style={styles.driverInfoRow}>
+                  <Text style={styles.driverName}>Test Driver</Text>
+                  <Text style={styles.driverVehicle}>Toyota Camry • KA 01 TEST 1234</Text>
+                </View>
+
+                <View style={styles.statsRow}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Distance</Text>
+                    <Text style={styles.statValue}>
+                      {(Math.sqrt(
+                        Math.pow(driverLocation.latitude - pickupLocation.latitude, 2) +
+                        Math.pow(driverLocation.longitude - pickupLocation.longitude, 2)
+                      ) * 111).toFixed(2)} km
+                    </Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Speed</Text>
+                    <Text style={styles.statValue}>{driverLocation.speed?.toFixed(1) || '0'} km/h</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Heading</Text>
+                    <Text style={styles.statValue}>{Math.round(driverLocation.heading || 0)}°</Text>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Test Scenarios */}
@@ -500,11 +519,72 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  trackingOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  trackingInfoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  trackingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#DC2626',
+    marginRight: 6,
+  },
+  trackingBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#DC2626',
+    letterSpacing: 0.5,
+  },
+  driverInfoRow: {
+    marginBottom: 16,
+  },
+  driverName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  driverVehicle: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
   },
   scenariosSection: {
     marginBottom: 16,
