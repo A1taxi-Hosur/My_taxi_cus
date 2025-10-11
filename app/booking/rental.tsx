@@ -123,9 +123,26 @@ export default function RentalBookingScreen() {
 
   useEffect(() => {
     if (rentalFares.length > 0) {
+      // Update packages when vehicle type changes
+      const packages = RENTAL_PACKAGE_SLOTS.map(slot => {
+        const fareData = rentalFares.find(fare =>
+          fare.duration_hours === slot.hours &&
+          fare.km_included === slot.freeKms &&
+          fare.vehicle_type === selectedVehicle
+        );
+
+        return {
+          ...slot,
+          baseFare: fareData?.base_fare || 500,
+          extraKmRate: fareData?.extra_km_rate || 8,
+          extraMinRate: fareData?.extra_minute_rate || 2,
+        };
+      });
+
+      setRENTAL_PACKAGES(packages);
       calculateRentalFare();
     }
-  }, [selectedVehicle, selectedPackage, pickupDateTime]);
+  }, [selectedVehicle, selectedPackage, pickupDateTime, rentalFares]);
 
   const getCurrentLocation = async () => {
     try {
@@ -165,29 +182,41 @@ export default function RentalBookingScreen() {
 
   const loadRentalFares = async () => {
     try {
-      console.log('📊 Loading rental fares from database...');
-      
-      const { data, error } = await supabase
-        .from('rental_fares')
-        .select('*')
-        .eq('is_active', true)
-        .order('vehicle_type');
+      console.log('📊 Loading rental fares via edge function...');
 
-      if (error) {
-        console.error('❌ Error loading rental fares:', error);
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/get-rental-fares`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Error loading rental fares:', errorText);
         setRentalFares([]);
-      } else if (data && data.length > 0) {
-        console.log('✅ Loaded rental fares from database:', data.length);
+        return;
+      }
+
+      const result = await response.json();
+      const data = result.data;
+
+      if (data && data.length > 0) {
+        console.log('✅ Loaded rental fares from edge function:', data.length);
         setRentalFares(data);
-        
+
         // Create RENTAL_PACKAGES from the database data
         const packages = RENTAL_PACKAGE_SLOTS.map(slot => {
-          const fareData = data.find(fare => 
-            fare.duration_hours === slot.hours && 
+          const fareData = data.find(fare =>
+            fare.duration_hours === slot.hours &&
             fare.km_included === slot.freeKms &&
             fare.vehicle_type === selectedVehicle
           );
-          
+
           return {
             ...slot,
             baseFare: fareData?.base_fare || 500,
@@ -195,7 +224,7 @@ export default function RentalBookingScreen() {
             extraMinRate: fareData?.extra_minute_rate || 2,
           };
         });
-        
+
         setRENTAL_PACKAGES(packages);
       } else {
         console.log('⚠️ No rental fares found');
@@ -452,9 +481,9 @@ export default function RentalBookingScreen() {
                       activeOpacity={0.7}
                     >
                       <View style={styles.packageHeader}>
-                        <Clock 
-                          size={16} 
-                          color={isSelected ? '#FFFFFF' : '#059669'} 
+                        <Clock
+                          size={16}
+                          color={isSelected ? '#FFFFFF' : '#059669'}
                         />
                         <Text style={[
                           styles.packageHours,
@@ -469,6 +498,14 @@ export default function RentalBookingScreen() {
                       ]}>
                         {pkg.freeKms}km free
                       </Text>
+                      {pkg.baseFare && (
+                        <Text style={[
+                          styles.packageFare,
+                          isSelected && styles.selectedPackageText,
+                        ]}>
+                          ₹{pkg.baseFare}
+                        </Text>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
