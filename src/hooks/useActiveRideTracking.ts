@@ -15,6 +15,7 @@ export interface ActiveRide {
   destination_longitude: number | null;
   destination_address: string | null;
   fare_amount: number;
+  pickup_otp: string | null;
   created_at: string;
   updated_at: string;
 }

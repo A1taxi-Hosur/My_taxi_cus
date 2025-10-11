@@ -327,20 +327,22 @@ export default function HomeScreen() {
   );
 
   const renderTrackingSheet = () => {
-    if (!activeRide || !driverLocation) {
+    if (!activeRide) {
       return null;
     }
 
-    const distance = calculateDistance(
+    const distance = driverLocation ? calculateDistance(
       driverLocation.latitude,
       driverLocation.longitude,
       pickupCoords?.latitude || 0,
       pickupCoords?.longitude || 0
-    );
+    ) : 0;
 
     return (
       <View style={styles.bottomSheet}>
-        <Text style={styles.trackingTitle}>Your driver is {distance.toFixed(1)} Kms away</Text>
+        <Text style={styles.trackingTitle}>
+          {driverLocation ? `Your driver is ${distance.toFixed(1)} Kms away` : 'Waiting for driver location...'}
+        </Text>
 
         {activeRide.pickup_otp && (
           <View style={styles.otpContainer}>
