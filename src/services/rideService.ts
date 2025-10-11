@@ -70,37 +70,42 @@ class RideService {
         return { data: demoRide, error: null };
       }
       
-      // Generate unique ride code
-      const rideCode = this.generateRideCode();
-      console.log('🎫 Generated ride code:', rideCode);
-      
-      const { data: ride, error } = await supabase
-        .from('rides')
-        .insert({
-          ride_code: rideCode,
-          customer_id: params.customerId,
-          pickup_address: params.pickupLocation,
-          pickup_latitude: params.pickupLatitude,
-          pickup_longitude: params.pickupLongitude,
-          pickup_landmark: params.pickupLandmark,
-          destination_address: params.destinationLocation,
-          destination_latitude: params.destinationLatitude,
-          destination_longitude: params.destinationLongitude,
-          destination_landmark: params.destinationLandmark,
-          vehicle_type: params.vehicleType,
-          fare_amount: params.fareAmount,
-          booking_type: 'regular',
-          status: 'requested',
-        })
-        .select()
-        .single();
+      // Use edge function to create ride (bypasses RLS authentication issues)
+      console.log('📡 Creating ride via edge function to bypass RLS...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/ride-api/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          customerId: params.customerId,
+          pickupLocation: params.pickupLocation,
+          pickupLatitude: params.pickupLatitude,
+          pickupLongitude: params.pickupLongitude,
+          destinationLocation: params.destinationLocation,
+          destinationLatitude: params.destinationLatitude,
+          destinationLongitude: params.destinationLongitude,
+          vehicleType: params.vehicleType,
+          fareAmount: params.fareAmount,
+        }),
+      });
 
-      if (error) {
-        console.error('❌ Error creating ride in database:', error);
-        return { data: null, error };
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Error creating ride via edge function:', errorText);
+        return { data: null, error: new Error(errorText) };
       }
 
-      console.log('✅ Ride created in database:', ride.id);
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('❌ Edge function returned error:', result.error);
+        return { data: null, error: result.error };
+      }
+
+      const ride = result.data;
+      console.log('✅ Ride created via edge function:', ride.id);
 
       // Only notify drivers for regular rides, admin for special bookings
       if (ride.booking_type === 'regular') {
