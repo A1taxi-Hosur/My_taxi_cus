@@ -218,42 +218,49 @@ export default function AirportBookingScreen() {
 
   const loadAirportFareConfigs = async () => {
     try {
-      console.log('🚕 [AIRPORT] Loading airport fare configs from airport_fares table...');
+      console.log('🚕 [AIRPORT] ========== LOADING AIRPORT FARES ==========');
+      console.log('🚕 [AIRPORT] Fetching from airport_fares table...');
 
       const { data, error } = await supabase
         .from('airport_fares')
-        .select('*')
+        .select('id, vehicle_type, hosur_to_airport_fare, airport_to_hosur_fare, is_active')
         .eq('is_active', true)
         .order('vehicle_type');
 
+      console.log('🚕 [AIRPORT] Raw database response:', { data, error });
+
       if (error) {
-        console.error('❌ [AIRPORT] Error loading airport fares:', error);
+        console.error('❌ [AIRPORT] Database error:', error);
         throw error;
       }
 
       if (data && data.length > 0) {
-        console.log('✅ [AIRPORT] Loaded airport fares from database:', data.length);
+        console.log('✅ [AIRPORT] Successfully loaded', data.length, 'fare configs from database');
 
         // Convert fare values to numbers (they might be strings from DB)
-        const normalizedData = data.map(fare => ({
-          ...fare,
-          hosur_to_airport_fare: parseFloat(fare.hosur_to_airport_fare.toString()),
-          airport_to_hosur_fare: parseFloat(fare.airport_to_hosur_fare.toString()),
-        }));
+        const normalizedData = data.map(fare => {
+          const normalized = {
+            ...fare,
+            hosur_to_airport_fare: parseFloat(fare.hosur_to_airport_fare.toString()),
+            airport_to_hosur_fare: parseFloat(fare.airport_to_hosur_fare.toString()),
+          };
+          console.log(`📋 [AIRPORT] ${fare.vehicle_type}:`, {
+            hosur_to_airport: normalized.hosur_to_airport_fare,
+            airport_to_hosur: normalized.airport_to_hosur_fare
+          });
+          return normalized;
+        });
 
-        console.log('✅ [AIRPORT] Airport fare details:', normalizedData.map(fare => ({
-          vehicle_type: fare.vehicle_type,
-          hosur_to_airport: fare.hosur_to_airport_fare,
-          airport_to_hosur: fare.airport_to_hosur_fare
-        })));
-
+        console.log('✅ [AIRPORT] All normalized fares:', normalizedData);
         setAirportFareConfigs(normalizedData);
+        console.log('✅ [AIRPORT] ========== FARES LOADED SUCCESSFULLY ==========');
       } else {
-        console.log('⚠️ [AIRPORT] No airport fares found in database, using fallback values');
+        console.log('⚠️ [AIRPORT] No fares found in database, using fallback');
         setAirportFareConfigs(getFallbackAirportConfigs());
       }
     } catch (error) {
-      console.error('❌ [AIRPORT] Error loading airport fares, using fallback:', error);
+      console.error('❌ [AIRPORT] Exception loading fares:', error);
+      console.log('⚠️ [AIRPORT] Falling back to hardcoded values');
       setAirportFareConfigs(getFallbackAirportConfigs());
     } finally {
       setConfigsLoading(false);
@@ -261,13 +268,15 @@ export default function AirportBookingScreen() {
   };
 
   const getFallbackAirportConfigs = (): AirportFareConfig[] => {
+    // Fallback values matching the database
+    console.log('⚠️ [AIRPORT] Using fallback airport fare configs');
     return [
-      { id: 'fallback1', vehicle_type: 'hatchback', hosur_to_airport_fare: 800, airport_to_hosur_fare: 800, is_active: true },
-      { id: 'fallback2', vehicle_type: 'hatchback_ac', hosur_to_airport_fare: 950, airport_to_hosur_fare: 950, is_active: true },
-      { id: 'fallback3', vehicle_type: 'sedan', hosur_to_airport_fare: 1200, airport_to_hosur_fare: 1200, is_active: true },
-      { id: 'fallback4', vehicle_type: 'sedan_ac', hosur_to_airport_fare: 1400, airport_to_hosur_fare: 1400, is_active: true },
-      { id: 'fallback5', vehicle_type: 'suv', hosur_to_airport_fare: 1800, airport_to_hosur_fare: 1800, is_active: true },
-      { id: 'fallback6', vehicle_type: 'suv_ac', hosur_to_airport_fare: 2200, airport_to_hosur_fare: 2200, is_active: true },
+      { id: 'fallback1', vehicle_type: 'hatchback', hosur_to_airport_fare: 1850, airport_to_hosur_fare: 1600, is_active: true },
+      { id: 'fallback2', vehicle_type: 'hatchback_ac', hosur_to_airport_fare: 1700, airport_to_hosur_fare: 1700, is_active: true },
+      { id: 'fallback3', vehicle_type: 'sedan', hosur_to_airport_fare: 1800, airport_to_hosur_fare: 1800, is_active: true },
+      { id: 'fallback4', vehicle_type: 'sedan_ac', hosur_to_airport_fare: 1900, airport_to_hosur_fare: 1900, is_active: true },
+      { id: 'fallback5', vehicle_type: 'suv', hosur_to_airport_fare: 4000, airport_to_hosur_fare: 4000, is_active: true },
+      { id: 'fallback6', vehicle_type: 'suv_ac', hosur_to_airport_fare: 4500, airport_to_hosur_fare: 4500, is_active: true },
     ];
   };
 
