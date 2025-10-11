@@ -67,23 +67,8 @@ export default function HistoryScreen() {
     });
 
     try {
-      // Step 1: Get total count of rides for pagination
-      console.log('📊 [HISTORY] Step 1: Getting total ride count...');
-      const { count: totalCount, error: countError } = await supabase
-        .from('rides')
-        .select('*', { count: 'exact', head: true })
-        .eq('customer_id', user.id)
-        .in('status', ['completed', 'cancelled', 'no_drivers_available']);
-
-      if (countError) {
-        console.error('❌ [HISTORY] Error getting ride count:', countError);
-        throw countError;
-      }
-
-      console.log('📊 [HISTORY] Total historical rides found:', totalCount || 0);
-
-      // Step 2: Fetch all historical rides with complete details via edge function
-      console.log('📚 [HISTORY] Step 2: Fetching complete ride history via edge function...');
+      // Fetch all historical rides with complete details via edge function
+      console.log('📚 [HISTORY] Fetching complete ride history via edge function...');
 
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -111,10 +96,11 @@ export default function HistoryScreen() {
       }
 
       const historicalRides = result.data;
+      const totalCount = historicalRides?.length || 0;
 
       console.log('✅ [HISTORY] Historical rides fetched successfully:', {
         totalRides: historicalRides?.length || 0,
-        totalCount: totalCount || 0,
+        totalCount: totalCount,
         ridesBreakdown: historicalRides?.reduce((acc, ride) => {
           acc[ride.status] = (acc[ride.status] || 0) + 1;
           return acc;
