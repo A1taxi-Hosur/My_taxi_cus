@@ -245,37 +245,55 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
       <svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
         <g transform="rotate(${rotation} 30 30)">
           <!-- Shadow -->
-          <ellipse cx="30" cy="50" rx="18" ry="6" fill="rgba(0,0,0,0.3)"/>
+          <ellipse cx="30" cy="52" rx="20" ry="5" fill="rgba(0,0,0,0.3)"/>
 
-          <!-- Car body -->
-          <g transform="translate(15, 10)">
-            <!-- Main body - White -->
-            <rect x="5" y="10" width="20" height="30" rx="3" fill="#FFFFFF"/>
+          <!-- Yellow Taxi Car Body -->
+          <g transform="translate(12, 8)">
+            <!-- Main body - Orange/Yellow -->
+            <rect x="6" y="12" width="24" height="32" rx="2" fill="#FFA500"/>
+            <rect x="7" y="13" width="22" height="30" rx="1.5" fill="#FFB833"/>
 
-            <!-- Windshield - Light gray -->
-            <rect x="8" y="12" width="14" height="8" rx="1" fill="#E5E7EB"/>
+            <!-- Roof - Darker Orange -->
+            <rect x="8" y="12" width="20" height="10" rx="2" fill="#FF8C00"/>
 
-            <!-- Rear window - Light gray -->
-            <rect x="8" y="30" width="14" height="6" rx="1" fill="#E5E7EB"/>
+            <!-- Windshield - Dark Gray -->
+            <rect x="10" y="14" width="16" height="6" rx="1" fill="#3D3D3D"/>
 
-            <!-- Wheels - Black -->
-            <circle cx="8" cy="15" r="3" fill="#000000"/>
-            <circle cx="22" cy="15" r="3" fill="#000000"/>
-            <circle cx="8" cy="35" r="3" fill="#000000"/>
-            <circle cx="22" cy="35" r="3" fill="#000000"/>
+            <!-- Rear Window - Dark Gray -->
+            <rect x="10" y="36" width="16" height="5" rx="1" fill="#3D3D3D"/>
 
-            <!-- Wheel rims - Gray -->
-            <circle cx="8" cy="15" r="1.5" fill="#6B7280"/>
-            <circle cx="22" cy="15" r="1.5" fill="#6B7280"/>
-            <circle cx="8" cy="35" r="1.5" fill="#6B7280"/>
-            <circle cx="22" cy="35" r="1.5" fill="#6B7280"/>
+            <!-- Side Windows - Dark Gray -->
+            <rect x="8" y="24" width="3" height="8" rx="0.5" fill="#3D3D3D"/>
+            <rect x="25" y="24" width="3" height="8" rx="0.5" fill="#3D3D3D"/>
 
-            <!-- Front headlights - Yellow -->
-            <circle cx="12" cy="8" r="1.5" fill="#FBBF24"/>
-            <circle cx="18" cy="8" r="1.5" fill="#FBBF24"/>
+            <!-- Wheels - Black with Gray Rim -->
+            <g>
+              <circle cx="10" cy="16" r="3.5" fill="#000000"/>
+              <circle cx="10" cy="16" r="1.8" fill="#4B5563"/>
 
-            <!-- Black border for contrast -->
-            <rect x="5" y="10" width="20" height="30" rx="3" fill="none" stroke="#000000" stroke-width="2"/>
+              <circle cx="26" cy="16" r="3.5" fill="#000000"/>
+              <circle cx="26" cy="16" r="1.8" fill="#4B5563"/>
+
+              <circle cx="10" cy="40" r="3.5" fill="#000000"/>
+              <circle cx="10" cy="40" r="1.8" fill="#4B5563"/>
+
+              <circle cx="26" cy="40" r="3.5" fill="#000000"/>
+              <circle cx="26" cy="40" r="1.8" fill="#4B5563"/>
+            </g>
+
+            <!-- Headlights - Yellow -->
+            <circle cx="14" cy="10" r="1.5" fill="#FFEB3B"/>
+            <circle cx="22" cy="10" r="1.5" fill="#FFEB3B"/>
+
+            <!-- Taillights - Red -->
+            <rect x="12" y="43" width="3" height="1.5" rx="0.5" fill="#FF4444"/>
+            <rect x="21" y="43" width="3" height="1.5" rx="0.5" fill="#FF4444"/>
+
+            <!-- Door Lines -->
+            <line x1="18" y1="24" x2="18" y2="36" stroke="#FF8C00" stroke-width="1"/>
+
+            <!-- Black Outline for contrast -->
+            <rect x="6" y="12" width="24" height="32" rx="2" fill="none" stroke="#000000" stroke-width="1.5" opacity="0.3"/>
           </g>
         </g>
       </svg>
