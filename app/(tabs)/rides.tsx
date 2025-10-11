@@ -7,6 +7,8 @@ import { rideService } from '../../src/services/rideService';
 import { useRideTracking } from '../../src/hooks/useRideTracking';
 import EnhancedGoogleMapView from '../../src/components/EnhancedGoogleMapView';
 import { realtimeService } from '../../src/services/realtimeService';
+import { useDriverLocationTracking } from '../../src/hooks/useDriverLocationTracking';
+import LiveDriverTracking from '../../src/components/LiveDriverTracking';
 import { useRideNotifications } from '../../src/hooks/useRideNotifications';
 import { useRouter } from 'expo-router';
 import { CircleCheck as CheckCircle, CircleAlert as AlertCircle } from 'lucide-react-native';
@@ -18,10 +20,20 @@ export default function RidesScreen() {
   const router = useRouter();
   const { notifications, markAsRead } = useRideNotifications();
   const [activeRides, setActiveRides] = useState<any[]>([]);
-  const [driverLocation, setDriverLocation] = useState<any>(null);
+  const [selectedRide, setSelectedRide] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [eta, setEta] = useState<number | null>(null);
+
+  const {
+    driverLocation,
+    isTracking,
+    error: trackingError,
+    lastUpdate
+  } = useDriverLocationTracking(
+    selectedRide?.id || null,
+    selectedRide?.driver_id || null
+  );
   const [cancelling, setCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedRideForCancel, setSelectedRideForCancel] = useState<any>(null);
@@ -141,6 +153,18 @@ export default function RidesScreen() {
       fetchActiveRides();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (activeRides.length > 0 && !selectedRide) {
+      const acceptedRide = activeRides.find(r =>
+        r.status === 'accepted' || r.status === 'assigned' || r.status === 'picked_up' || r.status === 'in_progress'
+      );
+      if (acceptedRide) {
+        console.log('🎯 [RIDES] Setting selected ride for tracking:', acceptedRide.id);
+        setSelectedRide(acceptedRide);
+      }
+    }
+  }, [activeRides]);
 
   useEffect(() => {
     // Subscribe to driver location updates and ride/booking status updates for all active rides
@@ -420,6 +444,66 @@ export default function RidesScreen() {
 
         <Text style={styles.statusSubtitle}>{statusInfo.subtitle}</Text>
 
+        {/* Live Tracking Map */}
+        {(ride.drivers || ride.assigned_driver) && driverLocation && selectedRide?.id === ride.id && (
+          <View style={styles.mapSection}>
+            <Text style={styles.sectionTitle}>Live Tracking</Text>
+            <View style={styles.mapContainer}>
+              <EnhancedGoogleMapView
+                initialRegion={{
+                  latitude: ride.pickup_latitude || 12.9716,
+                  longitude: ride.pickup_longitude || 77.5946,
+                  latitudeDelta: 0.02,
+                  longitudeDelta: 0.02,
+                }}
+                pickupCoords={{
+                  latitude: ride.pickup_latitude,
+                  longitude: ride.pickup_longitude,
+                }}
+                destinationCoords={{
+                  latitude: driverLocation.latitude,
+                  longitude: driverLocation.longitude,
+                }}
+                driverLocation={{
+                  latitude: driverLocation.latitude,
+                  longitude: driverLocation.longitude,
+                  heading: driverLocation.heading,
+                }}
+                showRoute={true}
+                style={styles.map}
+                showUserLocation={false}
+                followUserLocation={false}
+              />
+
+              <View style={styles.liveTrackingOverlay}>
+                <LiveDriverTracking
+                  driverLocation={{
+                    latitude: driverLocation.latitude,
+                    longitude: driverLocation.longitude,
+                    heading: driverLocation.heading,
+                  }}
+                  pickupLocation={{
+                    latitude: ride.pickup_latitude,
+                    longitude: ride.pickup_longitude,
+                    address: ride.pickup_address,
+                  }}
+                  driverInfo={{
+                    name: (ride.drivers?.users?.full_name || ride.assigned_driver?.users?.full_name) || 'Driver',
+                    vehicle: `${(ride.drivers?.vehicles?.make || ride.assigned_driver?.vehicles?.make) || ''} ${(ride.drivers?.vehicles?.model || ride.assigned_driver?.vehicles?.model) || ''}`,
+                    plateNumber: (ride.drivers?.vehicles?.registration_number || ride.assigned_driver?.vehicles?.registration_number) || 'N/A',
+                    phone: (ride.drivers?.users?.phone_number || ride.assigned_driver?.users?.phone_number),
+                  }}
+                />
+              </View>
+            </View>
+            {isTracking && lastUpdate && (
+              <Text style={styles.trackingInfo}>
+                📡 Live tracking • Updated {Math.floor((Date.now() - lastUpdate.getTime()) / 1000)}s ago
+              </Text>
+            )}
+          </View>
+        )}
+
         {/* Driver Information */}
         {(ride.drivers || ride.assigned_driver) && (
           <View style={styles.driverSection}>
@@ -458,15 +542,6 @@ export default function RidesScreen() {
                       {(ride.drivers?.vehicles?.registration_number || ride.assigned_driver?.vehicles?.registration_number) || 'N/A'}
                     </Text>
                   </View>
-                </View>
-              )}
-
-              {driverLocation && (
-                <View style={styles.locationUpdateContainer}>
-                  <View style={styles.locationUpdateDot} />
-                  <Text style={styles.locationUpdateText}>
-                    Live location • Updated {Math.floor((Date.now() - new Date(driverLocation.updated_at).getTime()) / 1000)}s ago
-                  </Text>
                 </View>
               )}
             </View>
@@ -855,6 +930,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginBottom: 20,
+  },
+  mapSection: {
+    marginBottom: 20,
+  },
+  mapContainer: {
+    height: 400,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    position: 'relative',
+  },
+  map: {
+    flex: 1,
+  },
+  liveTrackingOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  trackingInfo: {
+    fontSize: 12,
+    color: '#059669',
+    textAlign: 'center',
+    marginTop: 8,
+    fontWeight: '600',
   },
   driverSection: {
     marginBottom: 20,
