@@ -265,6 +265,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         console.log('✅ Session established with UUID:', authData.user.id);
+        console.log('✅ Session object:', authData.session);
+
+        // Set session to persist authentication
+        setSession(authData.session);
 
         // Set user with the UUID from the authenticated session
         setUser({
@@ -276,7 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           customer_id: authData.user.id  // Same UUID for consistency
         });
 
-        console.log('✅ User data set with proper UUID');
+        console.log('✅ User data and session set with proper UUID');
       } else {
         console.error('❌ Invalid response from server');
         return { error: new Error('Authentication failed: Invalid response') };
