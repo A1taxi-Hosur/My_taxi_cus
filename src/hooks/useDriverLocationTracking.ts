@@ -94,7 +94,7 @@ export function useDriverLocationTracking(
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'driver_locations',
           filter: `driver_id=eq.${driverId}`,
@@ -102,10 +102,11 @@ export function useDriverLocationTracking(
         (payload) => {
           console.log('🚗 [GPS-TRACKING] Real-time location update received:', {
             driver: driverId,
-            latitude: payload.new.latitude,
-            longitude: payload.new.longitude,
-            heading: payload.new.heading,
-            speed: payload.new.speed,
+            event: payload.eventType,
+            latitude: payload.new?.latitude,
+            longitude: payload.new?.longitude,
+            heading: payload.new?.heading,
+            speed: payload.new?.speed,
             timestamp: new Date().toISOString()
           });
 

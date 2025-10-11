@@ -119,6 +119,18 @@ export default function TestGPSTrackingScreen() {
       setSimulationStatus(`🚗 Watch the map! Driver moving for ${scenario.duration}s...`);
       console.log('📡 Starting edge function simulation...');
 
+      const simulationPayload = {
+        driverId: testDriverId,
+        startLat: scenario.start.lat,
+        startLon: scenario.start.lon,
+        endLat: scenario.end.latitude,
+        endLon: scenario.end.longitude,
+        durationSeconds: scenario.duration,
+        updateIntervalSeconds: 3,
+      };
+
+      console.log('📦 Simulation payload:', simulationPayload);
+
       fetch(
         `${supabaseUrl}/functions/v1/simulate-driver-movement`,
         {
@@ -127,17 +139,10 @@ export default function TestGPSTrackingScreen() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseKey}`,
           },
-          body: JSON.stringify({
-            driverId: testDriverId,
-            startLat: scenario.start.lat,
-            startLon: scenario.start.lon,
-            endLat: scenario.end.latitude,
-            endLon: scenario.end.longitude,
-            durationSeconds: scenario.duration,
-            updateIntervalSeconds: 3,
-          }),
+          body: JSON.stringify(simulationPayload),
         }
       ).then(async (response) => {
+        console.log('📨 Edge function response status:', response.status);
         const result = await response.json();
         if (response.ok) {
           console.log('✅ Simulation completed:', result);
