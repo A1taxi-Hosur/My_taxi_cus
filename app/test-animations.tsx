@@ -94,6 +94,13 @@ export default function TestAnimationsScreen() {
       color: '#8B5CF6',
     },
     {
+      name: 'GPS Tracking Test',
+      description: 'Test with real database updates',
+      action: () => router.push('/test-gps-tracking'),
+      icon: MapPin,
+      color: '#10B981',
+    },
+    {
       name: 'ETA Countdown',
       description: 'Animated countdown from current ETA',
       action: simulateETACountdown,
