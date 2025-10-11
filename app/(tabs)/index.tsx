@@ -28,6 +28,7 @@ import { isPointInAnyActiveZone } from '../../src/utils/zoneHelpers';
 import { DEFAULT_REGION } from '../../src/config/maps';
 import { useRideNotifications } from '../../src/hooks/useRideNotifications';
 import { driverLocationService, AvailableDriver } from '../../src/services/driverLocationService';
+import { supabase } from '../../src/utils/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -949,8 +950,68 @@ export default function HomeScreen() {
       console.log('🚗 User object:', JSON.stringify(user, null, 2));
       console.log('🚗 User ID being passed as customerId:', user.id);
       console.log('🚗 User ID type:', typeof user.id);
+
+      // FIX: If user.id is not a valid UUID (like "2"), fetch the correct UUID from Customers table
+      let actualCustomerId = user.id;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      if (typeof user.id === 'string' && !uuidRegex.test(user.id)) {
+        console.log('⚠️ User ID is not a valid UUID, fetching correct UUID from Customers table...');
+        console.log('⚠️ Invalid user.id:', user.id);
+
+        try {
+          const { data: customerData, error: customerError } = await supabase
+            .from('Customers')
+            .select('user_id')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (customerData && customerData.user_id) {
+            actualCustomerId = customerData.user_id;
+            console.log('✅ Found correct UUID from Customers table:', actualCustomerId);
+          } else {
+            console.error('❌ Failed to fetch correct UUID:', customerError);
+            showCustomAlert('Error', 'Failed to validate user account. Please sign out and sign back in.', 'error');
+            setLoading(false);
+            return;
+          }
+        } catch (lookupError) {
+          console.error('❌ Exception while fetching UUID:', lookupError);
+          showCustomAlert('Error', 'Failed to validate user account. Please sign out and sign back in.', 'error');
+          setLoading(false);
+          return;
+        }
+      } else if (typeof user.id === 'number') {
+        console.log('⚠️ User ID is a number, converting and fetching correct UUID from Customers table...');
+        console.log('⚠️ Numeric user.id:', user.id);
+
+        try {
+          const { data: customerData, error: customerError } = await supabase
+            .from('Customers')
+            .select('user_id')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (customerData && customerData.user_id) {
+            actualCustomerId = customerData.user_id;
+            console.log('✅ Found correct UUID from Customers table:', actualCustomerId);
+          } else {
+            console.error('❌ Failed to fetch correct UUID:', customerError);
+            showCustomAlert('Error', 'Failed to validate user account. Please sign out and sign back in.', 'error');
+            setLoading(false);
+            return;
+          }
+        } catch (lookupError) {
+          console.error('❌ Exception while fetching UUID:', lookupError);
+          showCustomAlert('Error', 'Failed to validate user account. Please sign out and sign back in.', 'error');
+          setLoading(false);
+          return;
+        }
+      }
+
+      console.log('🚗 Using customer ID:', actualCustomerId);
       const { data: ride, error } = await rideService.createRide({
-        customerId: user.id,
+        customerId: actualCustomerId,
         pickupLocation,
         pickupLatitude: pickupValidationCoords.latitude,
         pickupLongitude: pickupValidationCoords.longitude,
