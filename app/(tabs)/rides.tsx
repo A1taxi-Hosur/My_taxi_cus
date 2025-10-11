@@ -190,45 +190,30 @@ export default function RidesScreen() {
     try {
       const allActiveRides: any[] = [];
       
-      console.log('🔍 [RIDES] Step 1: Fetching active regular rides...');
-      
-      // Fetch all active regular rides
-      const { data: regularRides, error: rideError } = await supabase
-        .from('rides')
-        .select(`
-          *,
-          drivers!rides_driver_id_fkey (
-            id,
-            user_id,
-            license_number,
-            rating,
-            total_rides,
-            status,
-            users!drivers_user_id_fkey (
-              full_name,
-              phone_number
-            ),
-            vehicles!fk_drivers_vehicle (
-              make,
-              model,
-              registration_number,
-              color,
-              vehicle_type
-            )
-          )
-        `)
-        .eq('customer_id', user.id)
-        .in('status', ['requested', 'accepted', 'driver_arrived', 'in_progress'])
-        .order('created_at', { ascending: false });
-      
-      if (rideError && rideError.code !== 'PGRST116') {
-        console.error('🔍 [RIDES] Error fetching regular rides:', rideError);
-        return;
-      }
-      
-      if (regularRides && regularRides.length > 0) {
-        console.log('🔍 [RIDES] ✅ Found', regularRides.length, 'active regular rides');
-        allActiveRides.push(...regularRides);
+      console.log('🔍 [RIDES] Step 1: Fetching active regular rides via edge function...');
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/ride-api/active`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      let regularRides = [];
+      if (response.ok) {
+        const result = await response.json();
+        if (result.data) {
+          regularRides = result.data;
+          console.log('🔍 [RIDES] ✅ Found', regularRides.length, 'active regular rides');
+          allActiveRides.push(...regularRides);
+        }
+      } else {
+        console.error('🔍 [RIDES] Error fetching regular rides:', await response.text());
       }
       
       console.log('🔍 [RIDES] Step 2: Fetching active scheduled bookings...');

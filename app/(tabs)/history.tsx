@@ -82,40 +82,35 @@ export default function HistoryScreen() {
 
       console.log('📊 [HISTORY] Total historical rides found:', totalCount || 0);
 
-      // Step 2: Fetch all historical rides with complete details
-      console.log('📚 [HISTORY] Step 2: Fetching complete ride history...');
-      const { data: historicalRides, error: historyError } = await supabase
-        .from('rides')
-        .select(`
-          *,
-          drivers!rides_driver_id_fkey (
-            id,
-            user_id,
-            license_number,
-            rating,
-            total_rides,
-            users!drivers_user_id_fkey (
-              full_name, 
-              phone_number
-            ),
-            vehicles!fk_drivers_vehicle (
-              make, 
-              model, 
-              registration_number, 
-              color,
-              vehicle_type
-            )
-          )
-        `)
-        .eq('customer_id', user.id)
-        .in('status', ['completed', 'cancelled', 'no_drivers_available'])
-        .order('created_at', { ascending: false });
+      // Step 2: Fetch all historical rides with complete details via edge function
+      console.log('📚 [HISTORY] Step 2: Fetching complete ride history via edge function...');
 
-      if (historyError) {
-        console.error('❌ [HISTORY] Error fetching historical rides:', historyError);
-        console.error('❌ [HISTORY] Error details:', JSON.stringify(historyError, null, 2));
-        throw historyError;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/ride-api/history`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ [HISTORY] Error from edge function:', errorText);
+        throw new Error(errorText);
       }
+
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('❌ [HISTORY] Edge function returned error:', result.error);
+        throw result.error;
+      }
+
+      const historicalRides = result.data;
 
       console.log('✅ [HISTORY] Historical rides fetched successfully:', {
         totalRides: historicalRides?.length || 0,

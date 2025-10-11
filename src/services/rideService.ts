@@ -492,112 +492,47 @@ class RideService {
   async cancelRide(rideId: string, userId: string, reason?: string): Promise<{ data: RideDetails | null; error: any }> {
     try {
       console.log('🚫 RideService.cancelRide called with:', { rideId, userId, reason });
-      
-      // First, get the current ride to check driver assignment
-      const { data: currentRide, error: fetchError } = await supabase
-        .from('rides')
-        .select('id, status, driver_id, customer_id')
-        .eq('id', rideId)
-        .single();
 
-      if (fetchError || !currentRide) {
-        console.error('Error fetching ride for cancellation:', fetchError);
-        return { data: null, error: fetchError || new Error('Ride not found') };
-      }
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-      console.log('📋 Current ride before cancellation:', {
-        id: currentRide.id,
-        status: currentRide.status,
-        driver_id: currentRide.driver_id,
-        customer_id: currentRide.customer_id
+      // Use edge function to cancel ride (bypasses RLS authentication issues)
+      console.log('📡 Cancelling ride via edge function...');
+      const response = await fetch(`${supabaseUrl}/functions/v1/ride-api/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          rideId,
+          userId,
+          reason: reason || 'Cancelled by customer',
+        }),
       });
 
-      const { data: ride, error } = await supabase
-        .from('rides')
-        .update({
-          status: 'cancelled',
-          cancelled_by: userId,
-          cancellation_reason: reason,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', rideId)
-        .eq('customer_id', userId)
-        .in('status', ['requested', 'accepted', 'driver_arrived']) // Only allow cancellation for these statuses
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error cancelling ride:', error);
-        return { data: null, error };
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Error cancelling ride via edge function:', errorText);
+        return { data: null, error: new Error(errorText) };
       }
 
-      console.log('✅ Ride cancelled successfully in database:', ride.id);
+      const result = await response.json();
 
-      // If a driver was assigned, free them up and notify them
-      if (currentRide.driver_id) {
-        console.log('🔄 Freeing up assigned driver:', currentRide.driver_id);
-        
-        // Update driver status back to online
-        const { error: driverUpdateError } = await supabase
-          .from('drivers')
-          .update({ 
-            status: 'online',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', currentRide.driver_id);
-
-        if (driverUpdateError) {
-          console.warn('⚠️ Error updating driver status (non-blocking):', driverUpdateError);
-        } else {
-          console.log('✅ Driver status updated to online');
-        }
-
-        // Send cancellation notification to the assigned driver
-        try {
-          const { data: driverUser } = await supabase
-            .from('drivers')
-            .select('user_id')
-            .eq('id', currentRide.driver_id)
-            .maybeSingle();
-
-          if (driverUser) {
-            await notificationService.sendRideCancelled(driverUser.user_id, ride);
-            console.log('✅ Cancellation notification sent to assigned driver');
-          }
-        } catch (driverNotificationError) {
-          console.warn('⚠️ Error sending driver cancellation notification (non-blocking):', driverNotificationError);
-        }
+      if (result.error) {
+        console.error('❌ Edge function returned error:', result.error);
+        return { data: null, error: result.error };
       }
 
-      // Cancel any pending driver notifications for this ride
+      const ride = result.data;
+      console.log('✅ Ride cancelled via edge function:', ride.id);
+
+      // Send cancellation notifications (non-blocking)
       try {
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .update({ 
-            status: 'cancelled',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('type', 'ride_request')
-          .contains('data', { rideId: rideId })
-          .eq('status', 'unread');
-
-        if (notificationError) {
-          console.warn('⚠️ Error cancelling driver notifications (non-blocking):', notificationError);
-        } else {
-          console.log('✅ Cancelled pending driver notifications');
-        }
+        await notificationService.sendRideCancelled(userId, ride);
+        console.log('✅ Cancellation notification sent to customer');
       } catch (notificationError) {
-        console.warn('⚠️ Error cancelling notifications (non-blocking):', notificationError);
-      }
-
-      // Send cancellation notification to customer
-      if (ride) {
-        try {
-          await notificationService.sendRideCancelled(userId, ride);
-          console.log('✅ Cancellation notification sent to customer');
-        } catch (notificationError) {
-          console.warn('⚠️ Cancellation notification failed (non-blocking):', notificationError);
-        }
+        console.warn('⚠️ Cancellation notification failed (non-blocking):', notificationError);
       }
 
       return { data: ride, error: null };

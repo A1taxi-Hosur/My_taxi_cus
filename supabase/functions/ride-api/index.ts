@@ -26,6 +26,12 @@ Deno.serve(async (req: Request) => {
     // Route handling
     if (path === '/create' && req.method === 'POST') {
       return await createRide(req, supabase);
+    } else if (path === '/cancel' && req.method === 'POST') {
+      return await cancelRide(req, supabase);
+    } else if (path === '/history' && req.method === 'POST') {
+      return await getRideHistory(req, supabase);
+    } else if (path === '/active' && req.method === 'POST') {
+      return await getActiveRides(req, supabase);
     } else if (path === '/accept' && req.method === 'POST') {
       return await acceptRide(req, supabase);
     } else if (path === '/update-status' && req.method === 'POST') {
@@ -111,9 +117,176 @@ async function createRide(req: Request, supabase: any) {
   );
 }
 
+async function cancelRide(req: Request, supabase: any) {
+  const { rideId, userId, reason } = await req.json();
+
+  console.log('🚫 [EDGE] cancelRide called:', { rideId, userId, reason });
+
+  // First, get the current ride to check driver assignment
+  const { data: currentRide, error: fetchError } = await supabase
+    .from('rides')
+    .select('id, status, driver_id, customer_id')
+    .eq('id', rideId)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error('🚫 [EDGE] Error fetching ride:', fetchError);
+    throw fetchError;
+  }
+
+  if (!currentRide) {
+    throw new Error('Ride not found');
+  }
+
+  console.log('🚫 [EDGE] Current ride status:', currentRide.status);
+
+  // Update ride to cancelled
+  const { data: ride, error } = await supabase
+    .from('rides')
+    .update({
+      status: 'cancelled',
+      cancelled_by: userId,
+      cancellation_reason: reason || 'Cancelled by customer',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', rideId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('🚫 [EDGE] Error updating ride:', error);
+    throw error;
+  }
+
+  console.log('🚫 [EDGE] Ride cancelled successfully');
+
+  // If a driver was assigned, free them up
+  if (currentRide.driver_id) {
+    console.log('🚫 [EDGE] Freeing up driver:', currentRide.driver_id);
+    await supabase
+      .from('drivers')
+      .update({
+        status: 'online',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', currentRide.driver_id);
+  }
+
+  return new Response(
+    JSON.stringify({ data: ride, error: null }),
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    }
+  );
+}
+
+async function getRideHistory(req: Request, supabase: any) {
+  const { userId } = await req.json();
+
+  console.log('📚 [EDGE] getRideHistory called for user:', userId);
+
+  const { data: rides, error } = await supabase
+    .from('rides')
+    .select(`
+      *,
+      drivers!rides_driver_id_fkey (
+        id,
+        user_id,
+        license_number,
+        rating,
+        total_rides,
+        users!drivers_user_id_fkey (
+          full_name,
+          phone_number
+        ),
+        vehicles!fk_drivers_vehicle (
+          make,
+          model,
+          registration_number,
+          color,
+          vehicle_type
+        )
+      )
+    `)
+    .eq('customer_id', userId)
+    .in('status', ['completed', 'cancelled', 'no_drivers_available'])
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('📚 [EDGE] Error fetching ride history:', error);
+    throw error;
+  }
+
+  console.log('📚 [EDGE] Ride history fetched:', rides?.length || 0, 'rides');
+
+  return new Response(
+    JSON.stringify({ data: rides, error: null }),
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    }
+  );
+}
+
+async function getActiveRides(req: Request, supabase: any) {
+  const { userId } = await req.json();
+
+  console.log('🔍 [EDGE] getActiveRides called for user:', userId);
+
+  const { data: rides, error } = await supabase
+    .from('rides')
+    .select(`
+      *,
+      drivers!rides_driver_id_fkey (
+        id,
+        user_id,
+        license_number,
+        rating,
+        total_rides,
+        status,
+        users!drivers_user_id_fkey (
+          full_name,
+          phone_number
+        ),
+        vehicles!fk_drivers_vehicle (
+          make,
+          model,
+          registration_number,
+          color,
+          vehicle_type
+        )
+      )
+    `)
+    .eq('customer_id', userId)
+    .in('status', ['requested', 'accepted', 'driver_arrived', 'in_progress'])
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('🔍 [EDGE] Error fetching active rides:', error);
+    throw error;
+  }
+
+  console.log('🔍 [EDGE] Active rides fetched:', rides?.length || 0, 'rides');
+
+  return new Response(
+    JSON.stringify({ data: rides, error: null }),
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    }
+  );
+}
+
 async function acceptRide(req: Request, supabase: any) {
   const { rideId, driverId } = await req.json();
-  
+
   const { data: ride, error } = await supabase
     .from('rides')
     .update({
