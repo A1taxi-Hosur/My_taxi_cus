@@ -291,6 +291,13 @@ export default function TestGPSTrackingScreen() {
                     <Text style={styles.statValue}>{Math.round(driverLocation.heading || 0)}°</Text>
                   </View>
                 </View>
+
+                <View style={styles.coordsRow}>
+                  <Text style={styles.coordsLabel}>Position:</Text>
+                  <Text style={styles.coordsValue}>
+                    {driverLocation.latitude.toFixed(6)}, {driverLocation.longitude.toFixed(6)}
+                  </Text>
+                </View>
               </View>
             )}
           </View>
@@ -595,6 +602,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1F2937',
+  },
+  coordsRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  coordsLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginRight: 8,
+  },
+  coordsValue: {
+    fontSize: 11,
+    color: '#1F2937',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    flex: 1,
   },
   scenariosSection: {
     marginBottom: 16,

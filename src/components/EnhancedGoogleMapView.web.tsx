@@ -14,7 +14,7 @@ interface EnhancedGoogleMapViewProps {
   };
   pickupCoords?: { latitude: number; longitude: number };
   destinationCoords?: { latitude: number; longitude: number };
-  driverLocation?: { latitude: number; longitude: number };
+  driverLocation?: { latitude: number; longitude: number; heading?: number; speed?: number };
   availableDrivers?: AvailableDriver[];
   showRoute?: boolean;
   onMapPress?: (coordinate: { latitude: number; longitude: number }) => void;
@@ -48,6 +48,7 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
   const directionsRenderer = useRef<google.maps.DirectionsRenderer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
   const driverMarkerRef = useRef<google.maps.Marker | null>(null);
+  const previousDriverLocationRef = useRef<{ latitude: number; longitude: number; heading?: number } | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [userLocation, setUserLocation] = useState<any>(null);
   const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
@@ -104,8 +105,21 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
 
   useEffect(() => {
     if (isMapReady && googleMapRef.current && driverLocation) {
-      console.log('🗺️ Map: Updating driver marker from driverLocation prop change:', driverLocation);
-      updateDriverMarker(driverLocation);
+      const hasChanged = !previousDriverLocationRef.current ||
+        previousDriverLocationRef.current.latitude !== driverLocation.latitude ||
+        previousDriverLocationRef.current.longitude !== driverLocation.longitude ||
+        previousDriverLocationRef.current.heading !== driverLocation.heading;
+
+      if (hasChanged) {
+        console.log('🗺️ Map: Driver location changed!', {
+          old: previousDriverLocationRef.current,
+          new: driverLocation,
+        });
+        updateDriverMarker(driverLocation);
+        previousDriverLocationRef.current = { ...driverLocation };
+      } else {
+        console.log('⚠️ Map: driverLocation prop updated but values unchanged');
+      }
     }
   }, [isMapReady, driverLocation]);
 
@@ -231,30 +245,37 @@ const EnhancedGoogleMapView = forwardRef<MapRef, EnhancedGoogleMapViewProps>(({
       <svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
         <g transform="rotate(${rotation} 30 30)">
           <!-- Shadow -->
-          <ellipse cx="30" cy="50" rx="18" ry="6" fill="rgba(0,0,0,0.2)"/>
+          <ellipse cx="30" cy="50" rx="18" ry="6" fill="rgba(0,0,0,0.3)"/>
 
           <!-- Car body -->
           <g transform="translate(15, 10)">
-            <!-- Main body -->
-            <rect x="5" y="10" width="20" height="30" rx="3" fill="#2563EB"/>
+            <!-- Main body - White -->
+            <rect x="5" y="10" width="20" height="30" rx="3" fill="#FFFFFF"/>
 
-            <!-- Windshield -->
-            <rect x="8" y="12" width="14" height="8" rx="1" fill="#60A5FA"/>
+            <!-- Windshield - Light gray -->
+            <rect x="8" y="12" width="14" height="8" rx="1" fill="#E5E7EB"/>
 
-            <!-- Rear window -->
-            <rect x="8" y="30" width="14" height="6" rx="1" fill="#60A5FA"/>
+            <!-- Rear window - Light gray -->
+            <rect x="8" y="30" width="14" height="6" rx="1" fill="#E5E7EB"/>
 
-            <!-- Wheels -->
-            <circle cx="8" cy="15" r="3" fill="#1F2937"/>
-            <circle cx="22" cy="15" r="3" fill="#1F2937"/>
-            <circle cx="8" cy="35" r="3" fill="#1F2937"/>
-            <circle cx="22" cy="35" r="3" fill="#1F2937"/>
+            <!-- Wheels - Black -->
+            <circle cx="8" cy="15" r="3" fill="#000000"/>
+            <circle cx="22" cy="15" r="3" fill="#000000"/>
+            <circle cx="8" cy="35" r="3" fill="#000000"/>
+            <circle cx="22" cy="35" r="3" fill="#000000"/>
 
-            <!-- Front indicator -->
-            <path d="M 15 5 L 12 10 L 18 10 Z" fill="#FBBF24"/>
+            <!-- Wheel rims - Gray -->
+            <circle cx="8" cy="15" r="1.5" fill="#6B7280"/>
+            <circle cx="22" cy="15" r="1.5" fill="#6B7280"/>
+            <circle cx="8" cy="35" r="1.5" fill="#6B7280"/>
+            <circle cx="22" cy="35" r="1.5" fill="#6B7280"/>
 
-            <!-- White border -->
-            <rect x="5" y="10" width="20" height="30" rx="3" fill="none" stroke="white" stroke-width="1.5"/>
+            <!-- Front headlights - Yellow -->
+            <circle cx="12" cy="8" r="1.5" fill="#FBBF24"/>
+            <circle cx="18" cy="8" r="1.5" fill="#FBBF24"/>
+
+            <!-- Black border for contrast -->
+            <rect x="5" y="10" width="20" height="30" rx="3" fill="none" stroke="#000000" stroke-width="2"/>
           </g>
         </g>
       </svg>
