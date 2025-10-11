@@ -250,16 +250,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data.success && data.customerId) {
         console.log('✅ User verified successfully!');
-        console.log('✅ User ID:', data.userId);
-        console.log('✅ Customer ID:', data.customerId);
+        console.log('✅ User ID (UUID):', data.userId);
+        console.log('✅ Customer ID (from Customers table):', data.customerId);
+        console.log('✅ Using userId as the primary ID for rides and other operations');
 
         setUser({
-          id: data.userId,
+          id: data.userId,  // CRITICAL: This MUST be the UUID from auth.users, not customerId
           email: data.user.email,
           full_name: data.user.user_metadata?.full_name || 'User',
           phone_number: data.user.user_metadata?.phone_number,
           role: 'customer',
-          customer_id: data.customerId
+          customer_id: data.userId  // Also use UUID here to ensure consistency
         });
 
         console.log('✅ User data set, verification complete');
