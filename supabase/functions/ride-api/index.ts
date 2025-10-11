@@ -32,6 +32,10 @@ Deno.serve(async (req: Request) => {
       return await getRideHistory(req, supabase);
     } else if (path === '/active' && req.method === 'POST') {
       return await getActiveRides(req, supabase);
+    } else if (path === '/current' && req.method === 'POST') {
+      return await getCurrentRideFunc(req, supabase);
+    } else if (path === '/details' && req.method === 'POST') {
+      return await getRideDetailsPost(req, supabase);
     } else if (path === '/accept' && req.method === 'POST') {
       return await acceptRide(req, supabase);
     } else if (path === '/update-status' && req.method === 'POST') {
@@ -275,6 +279,98 @@ async function getActiveRides(req: Request, supabase: any) {
 
   return new Response(
     JSON.stringify({ data: rides, error: null }),
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    }
+  );
+}
+
+async function getCurrentRideFunc(req: Request, supabase: any) {
+  const { userId } = await req.json();
+
+  console.log('🔍 [EDGE] getCurrentRide called for user:', userId);
+
+  const { data: rides, error } = await supabase
+    .from('rides')
+    .select(`
+      *,
+      drivers!rides_driver_id_fkey (
+        id,
+        user_id,
+        license_number,
+        rating,
+        total_rides,
+        status,
+        users!drivers_user_id_fkey (
+          full_name,
+          phone_number
+        ),
+        vehicles!fk_drivers_vehicle (
+          make,
+          model,
+          registration_number,
+          color,
+          vehicle_type
+        )
+      )
+    `)
+    .eq('customer_id', userId)
+    .in('status', ['requested', 'accepted', 'driver_arrived', 'in_progress'])
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error('🔍 [EDGE] Error fetching current ride:', error);
+    throw error;
+  }
+
+  const ride = rides && rides.length > 0 ? rides[0] : null;
+  console.log('🔍 [EDGE] Current ride:', ride ? ride.id : 'none');
+
+  return new Response(
+    JSON.stringify({ data: ride, error: null }),
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    }
+  );
+}
+
+async function getRideDetailsPost(req: Request, supabase: any) {
+  const { rideId } = await req.json();
+
+  console.log('🔍 [EDGE] getRideDetails called for ride:', rideId);
+
+  const { data: ride, error } = await supabase
+    .from('rides')
+    .select(`
+      *,
+      drivers (
+        id,
+        license_number,
+        rating,
+        users (full_name, phone_number),
+        vehicles!fk_drivers_vehicle (make, model, registration_number, color)
+      ),
+      users!rides_customer_id_fkey (full_name, phone_number)
+    `)
+    .eq('id', rideId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('🔍 [EDGE] Error fetching ride details:', error);
+    throw error;
+  }
+
+  console.log('🔍 [EDGE] Ride details:', ride ? 'found' : 'not found');
+
+  return new Response(
+    JSON.stringify({ data: ride, error: null }),
     {
       headers: {
         'Content-Type': 'application/json',

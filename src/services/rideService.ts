@@ -404,23 +404,25 @@ class RideService {
 
   async getRideDetails(rideId: string): Promise<{ data: any; error: any }> {
     try {
-      const { data: ride, error } = await supabase
-        .from('rides')
-        .select(`
-          *,
-          drivers (
-            id,
-            license_number,
-            rating,
-            users (full_name, phone_number),
-            vehicles!fk_drivers_vehicle (make, model, registration_number, color)
-          ),
-          users!rides_customer_id_fkey (full_name, phone_number)
-        `)
-        .eq('id', rideId)
-        .single();
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-      return { data: ride, error };
+      const response = await fetch(`${supabaseUrl}/functions/v1/ride-api/details`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({ rideId }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { data: null, error: new Error(errorText) };
+      }
+
+      const result = await response.json();
+      return { data: result.data, error: result.error };
     } catch (error) {
       console.error('Get ride details failed:', error);
       return { data: null, error };
@@ -430,61 +432,37 @@ class RideService {
   async getCurrentRide(userId: string): Promise<{ data: RideDetails | null; error: any }> {
     try {
       console.log('🔍 [RIDE_SERVICE] getCurrentRide called for userId:', userId);
-      console.log('🔍 [RIDE_SERVICE] Building query for current ride...');
 
-      const { data: rides, error } = await supabase
-        .from('rides')
-        .select(`
-          *,
-          drivers!rides_driver_id_fkey (
-            id,
-            user_id,
-            license_number,
-            rating,
-            total_rides,
-            status,
-            users!drivers_user_id_fkey (
-              full_name,
-              phone_number
-            ),
-            vehicles!fk_drivers_vehicle (
-              make,
-              model,
-              registration_number,
-              color,
-              vehicle_type
-            )
-          )
-        `)
-        .eq('customer_id', userId)
-        .in('status', ['requested', 'accepted', 'driver_arrived', 'in_progress'])
-        .order('created_at', { ascending: false })
-        .limit(1);
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-      console.log('🔍 [RIDE_SERVICE] Query executed. Response:', {
-        hasData: !!rides && rides.length > 0,
-        errorCode: error?.code,
-        errorMessage: error?.message,
-        errorDetails: error?.details,
-        errorHint: error?.hint
+      const response = await fetch(`${supabaseUrl}/functions/v1/ride-api/current`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({ userId }),
       });
 
-      const ride = rides && rides.length > 0 ? rides[0] : null;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('🔍 [RIDE_SERVICE] Error from edge function:', errorText);
+        return { data: null, error: new Error(errorText) };
+      }
 
-      if (ride) {
+      const result = await response.json();
+
+      if (result.data) {
         console.log('🔍 [RIDE_SERVICE] Found current ride:', {
-          id: ride.id,
-          status: ride.status,
-          customer_id: ride.customer_id,
-          driver_id: ride.driver_id,
-          hasDriverData: !!ride.drivers
+          id: result.data.id,
+          status: result.data.status,
         });
       }
 
-      return { data: ride, error };
+      return { data: result.data, error: result.error };
     } catch (error) {
       console.error('Get current ride failed:', error);
-      console.error('🔍 [RIDE_SERVICE] Exception details:', JSON.stringify(error, null, 2));
       return { data: null, error };
     }
   }

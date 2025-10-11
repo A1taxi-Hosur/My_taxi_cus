@@ -68,34 +68,41 @@ export default function DriverSearchScreen() {
 
     try {
       if (rideDetails.rideId) {
-        // Cancel regular ride
-        console.log('🚫 Cancelling regular ride:', rideDetails.rideId);
-        
-        const { data, error } = await supabase
-          .from('rides')
-          .update({
-            status: 'cancelled',
-            cancelled_by: user?.id,
-            cancellation_reason: 'Cancelled by customer during driver search',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', rideDetails.rideId)
-          .eq('customer_id', user?.id)
-          .in('status', ['requested', 'accepted'])
-          .select();
+        // Cancel regular ride via edge function
+        console.log('🚫 Cancelling regular ride via edge function:', rideDetails.rideId);
 
-        if (error) {
-          console.error('🚫 Error cancelling ride:', error);
+        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/ride-api/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            rideId: rideDetails.rideId,
+            userId: user?.id,
+            reason: 'Cancelled by customer during driver search',
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('🚫 Error cancelling ride:', errorText);
           Alert.alert('Error', 'Failed to cancel ride. Please try again.');
           return;
         }
 
-        if (!data || data.length === 0) {
-          console.warn('🚫 No ride found to cancel (may already be cancelled)');
-          Alert.alert('Info', 'Ride may already be cancelled or completed.');
-        } else {
-          console.log('✅ Regular ride cancelled successfully');
+        const result = await response.json();
+
+        if (result.error) {
+          console.error('🚫 Error from edge function:', result.error);
+          Alert.alert('Error', 'Failed to cancel ride. Please try again.');
+          return;
         }
+
+        console.log('✅ Regular ride cancelled successfully via edge function');
       } else if (rideDetails.bookingId) {
         // Cancel scheduled booking
         console.log('🚫 Cancelling scheduled booking:', rideDetails.bookingId);
@@ -296,7 +303,7 @@ export default function DriverSearchScreen() {
             )
           `)
           .eq('id', rideId)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('🚨 [DEBUG] Ride polling error:', error);
@@ -360,7 +367,7 @@ export default function DriverSearchScreen() {
           .from('scheduled_bookings')
           .select('*')
           .eq('id', bookingId)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('🚨 [DEBUG] Booking polling error:', error);
