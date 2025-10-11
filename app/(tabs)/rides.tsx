@@ -149,24 +149,70 @@ export default function RidesScreen() {
   }, [user]);
 
   useEffect(() => {
-    // Subscribe to driver location updates for all active rides with assigned drivers
+    // Subscribe to driver location updates and ride/booking status updates for all active rides
     const subscriptions: any[] = [];
-    
+
     activeRides.forEach(ride => {
+      // Subscribe to ride/booking status updates
+      if (ride.isScheduledBooking) {
+        console.log('📡 [RIDES] Subscribing to booking updates:', ride.id);
+        const statusSub = realtimeService.subscribeToBooking(ride.id, (updatedBooking) => {
+          console.log('🔔 [RIDES] Booking update received:', updatedBooking);
+          // Update the ride in the activeRides array
+          setActiveRides(prev => prev.map(r =>
+            r.id === updatedBooking.id
+              ? {
+                  ...r,
+                  status: updatedBooking.status === 'assigned' ? 'accepted' : updatedBooking.status,
+                  pickup_otp: updatedBooking.pickup_otp,
+                  drop_otp: updatedBooking.drop_otp,
+                  driver_id: updatedBooking.assigned_driver_id,
+                }
+              : r
+          ));
+          // Refresh to get full driver details if driver was just assigned
+          if (updatedBooking.status === 'assigned' && updatedBooking.assigned_driver_id) {
+            setTimeout(() => fetchActiveRides(), 1000);
+          }
+        });
+        subscriptions.push(statusSub);
+      } else if (ride.id) {
+        console.log('📡 [RIDES] Subscribing to ride updates:', ride.id);
+        const statusSub = realtimeService.subscribeToRide(ride.id, (updatedRide) => {
+          console.log('🔔 [RIDES] Ride update received:', updatedRide);
+          // Update the ride in the activeRides array
+          setActiveRides(prev => prev.map(r =>
+            r.id === updatedRide.id
+              ? {
+                  ...r,
+                  status: updatedRide.status,
+                  pickup_otp: updatedRide.pickup_otp,
+                  drop_otp: updatedRide.drop_otp,
+                  driver_id: updatedRide.driver_id,
+                }
+              : r
+          ));
+        });
+        subscriptions.push(statusSub);
+      }
+
+      // Subscribe to driver location updates if driver assigned
       if (ride.driver_id && (ride.drivers?.user_id || ride.assigned_driver?.user_id)) {
         const driverUserId = ride.drivers?.user_id || ride.assigned_driver?.user_id;
-        const subscription = realtimeService.subscribeToDriverLocation(
+        console.log('📍 [RIDES] Subscribing to driver location:', driverUserId);
+        const locationSub = realtimeService.subscribeToDriverLocation(
           driverUserId,
           (location) => {
             setDriverLocation(location);
             calculateETA(location, ride);
           }
         );
-        subscriptions.push(subscription);
+        subscriptions.push(locationSub);
       }
     });
 
     return () => {
+      console.log('🧹 [RIDES] Cleaning up subscriptions');
       subscriptions.forEach(sub => sub.unsubscribe());
     };
   }, [activeRides]);
@@ -507,6 +553,14 @@ export default function RidesScreen() {
 
   const getStatusInfo = (ride: any) => {
     switch (ride?.status) {
+      case 'pending':
+        return {
+          icon: Clock,
+          title: 'Pending Assignment',
+          subtitle: 'Waiting for admin to assign driver',
+          color: '#F59E0B',
+          backgroundColor: '#FEF3C7',
+        };
       case 'requested':
         return {
           icon: Clock,
@@ -515,6 +569,8 @@ export default function RidesScreen() {
           color: '#F59E0B',
           backgroundColor: '#FEF3C7',
         };
+      case 'assigned':
+      case 'confirmed':
       case 'accepted':
         return {
           icon: Car,
