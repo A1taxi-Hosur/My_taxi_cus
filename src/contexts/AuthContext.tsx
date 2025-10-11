@@ -248,22 +248,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error(data.error || 'Failed to verify OTP') };
       }
 
-      if (data.success && data.customerId) {
+      if (data.success && data.userId) {
         console.log('✅ User verified successfully!');
-        console.log('✅ User ID (UUID):', data.userId);
-        console.log('✅ Customer ID (from Customers table):', data.customerId);
-        console.log('✅ Using userId as the primary ID for rides and other operations');
+        console.log('✅ User ID (UUID) from verify-otp:', data.userId);
+        console.log('✅ This UUID will be used for all database operations');
 
-        setUser({
-          id: data.userId,  // CRITICAL: This MUST be the UUID from auth.users, not customerId
-          email: data.user.email,
-          full_name: data.user.user_metadata?.full_name || 'User',
-          phone_number: data.user.user_metadata?.phone_number,
-          role: 'customer',
-          customer_id: data.userId  // Also use UUID here to ensure consistency
+        // Now sign in the user with Supabase to get a proper session
+        const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
         });
 
-        console.log('✅ User data set, verification complete');
+        if (signInError || !authData.user) {
+          console.error('❌ Auto sign-in failed:', signInError);
+          return { error: new Error('Failed to establish session') };
+        }
+
+        console.log('✅ Session established with UUID:', authData.user.id);
+
+        // Set user with the UUID from the authenticated session
+        setUser({
+          id: authData.user.id,  // UUID from auth.users
+          email: authData.user.email,
+          full_name: authData.user.user_metadata?.full_name || 'User',
+          phone_number: authData.user.user_metadata?.phone_number,
+          role: 'customer',
+          customer_id: authData.user.id  // Same UUID for consistency
+        });
+
+        console.log('✅ User data set with proper UUID');
       } else {
         console.error('❌ Invalid response from server');
         return { error: new Error('Authentication failed: Invalid response') };

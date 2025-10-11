@@ -946,6 +946,9 @@ export default function HomeScreen() {
 
       // Create the ride first
       console.log('🚗 About to create ride with rideService...');
+      console.log('🚗 User object:', JSON.stringify(user, null, 2));
+      console.log('🚗 User ID being passed as customerId:', user.id);
+      console.log('🚗 User ID type:', typeof user.id);
       const { data: ride, error } = await rideService.createRide({
         customerId: user.id,
         pickupLocation,
