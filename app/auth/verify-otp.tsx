@@ -84,8 +84,9 @@ export default function VerifyOTPScreen() {
         return;
       }
 
-      if (data.success && data.customerId) {
-        console.log('✅ OTP verified, customer ID:', data.customerId);
+      if (data.success && data.userId) {
+        console.log('✅ OTP verified, user ID (UUID):', data.userId);
+        console.log('✅ Customer ID (integer):', data.customerId);
 
         await AsyncStorage.setItem('customerId', data.customerId.toString());
         await AsyncStorage.setItem('customerName', data.user.user_metadata?.full_name || 'User');
@@ -93,15 +94,15 @@ export default function VerifyOTPScreen() {
         await AsyncStorage.setItem('isAuthenticated', 'true');
 
         const userData = {
-          id: data.customerId,
-          email: `${phoneNumber}@phone.a1taxi.local`,
+          id: data.userId,  // Use UUID from auth.users, not integer from Customers table
+          email: data.email || `${phoneNumber}@phone.a1taxi.local`,
           full_name: data.user.user_metadata?.full_name || 'User',
           phone_number: data.user.user_metadata?.phone_number || phoneNumber,
           role: 'customer',
-          customer_id: data.customerId
+          customer_id: data.userId  // Use same UUID for consistency
         };
 
-        console.log('✅ Setting authenticated user in context...');
+        console.log('✅ Setting authenticated user in context with UUID:', userData.id);
         setAuthenticatedUser(userData);
 
         console.log('✅ Customer data saved, navigating to home...');
