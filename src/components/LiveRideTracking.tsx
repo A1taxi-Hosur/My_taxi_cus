@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,14 @@ import {
   Alert,
   ActivityIndicator,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MapPin, Navigation, Phone, User, Car, Clock } from 'lucide-react-native';
 import { apiService } from '../services/apiService';
 import { realtimeService } from '../services/realtimeService';
 import RealTimeMap from './RealTimeMap';
+import AnimatedETAProgressRing from './AnimatedETAProgressRing';
 
 interface LiveRideTrackingProps {
   rideId: string;
@@ -25,13 +27,24 @@ export default function LiveRideTracking({ rideId, onRideComplete }: LiveRideTra
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [showMap, setShowMap] = useState(true);
+  const [calculatedETA, setCalculatedETA] = useState<number | null>(null);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const statusBadgeScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     fetchRideDetails();
-    
+
     // Subscribe to ride updates
     const rideSubscription = realtimeService.subscribeToRide(rideId, (updatedRide) => {
+      const prevStatus = ride?.status;
       setRide(updatedRide);
+
+      if (prevStatus !== updatedRide.status) {
+        animateStatusChange();
+      }
+
       if (updatedRide.status === 'completed' || updatedRide.status === 'cancelled') {
         onRideComplete?.();
       }
@@ -41,6 +54,64 @@ export default function LiveRideTracking({ rideId, onRideComplete }: LiveRideTra
       rideSubscription.unsubscribe();
     };
   }, [rideId]);
+
+  useEffect(() => {
+    if (ride) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [ride]);
+
+  useEffect(() => {
+    if (driverLocation && ride) {
+      const distance = calculateDistance(
+        driverLocation.latitude,
+        driverLocation.longitude,
+        ride.pickup_latitude,
+        ride.pickup_longitude
+      );
+      const eta = Math.round((distance / 30) * 60);
+      setCalculatedETA(eta);
+    }
+  }, [driverLocation, ride]);
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const animateStatusChange = () => {
+    Animated.sequence([
+      Animated.timing(statusBadgeScale, {
+        toValue: 1.2,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(statusBadgeScale, {
+        toValue: 1,
+        tension: 100,
+        friction: 5,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
   const fetchRideDetails = async () => {
     const { data, error } = await apiService.getRideDetails(rideId);
@@ -155,21 +226,46 @@ export default function LiveRideTracking({ rideId, onRideComplete }: LiveRideTra
   const statusInfo = getStatusInfo();
 
   return (
-    <View style={styles.container}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
       <LinearGradient
         colors={['#FFFFFF', '#F8FAFC']}
         style={styles.card}
       >
         <View style={styles.statusContainer}>
-          <View style={[styles.statusBadge, { backgroundColor: statusInfo.backgroundColor }]}>
+          <Animated.View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: statusInfo.backgroundColor },
+              { transform: [{ scale: statusBadgeScale }] },
+            ]}
+          >
             <Text style={[styles.statusText, { color: statusInfo.color }]}>
               {statusInfo.text}
             </Text>
-          </View>
+          </Animated.View>
           <Text style={styles.rideCode}>#{ride.ride_code}</Text>
         </View>
 
         <Text style={styles.statusDescription}>{statusInfo.description}</Text>
+
+        {calculatedETA && (ride.status === 'accepted' || ride.status === 'driver_arrived') && (
+          <View style={styles.etaRingContainer}>
+            <AnimatedETAProgressRing
+              etaMinutes={calculatedETA}
+              maxETA={15}
+              size={120}
+              strokeWidth={8}
+            />
+          </View>
+        )}
 
         {/* Real-time Map */}
         {showMap && ride && (
@@ -268,7 +364,7 @@ export default function LiveRideTracking({ rideId, onRideComplete }: LiveRideTra
           </TouchableOpacity>
         )}
       </LinearGradient>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -330,6 +426,11 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  etaRingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
   },
   mapContainer: {
     height: 250,

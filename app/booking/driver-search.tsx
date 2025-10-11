@@ -18,6 +18,8 @@ import { supabase } from '../../src/utils/supabase';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { realtimeService } from '../../src/services/realtimeService';
 import EnhancedGoogleMapView from '../../src/components/EnhancedGoogleMapView';
+import DriverArrivingAnimation from '../../src/components/DriverArrivingAnimation';
+import AnimatedETAProgressRing from '../../src/components/AnimatedETAProgressRing';
 
 // Add debug logging for component lifecycle
 console.log('🚨 [DEBUG] DriverSearchScreen module loaded');
@@ -38,7 +40,7 @@ export default function DriverSearchScreen() {
     paramsValues: params
   });
   
-  const [searchStatus, setSearchStatus] = useState<'searching' | 'found' | 'cancelled'>('searching');
+  const [searchStatus, setSearchStatus] = useState<'searching' | 'found' | 'celebrating' | 'cancelled'>('searching');
   const [estimatedTime, setEstimatedTime] = useState('2-5 min');
   const [cancelling, setCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -48,6 +50,8 @@ export default function DriverSearchScreen() {
   const [initialCheckComplete, setInitialCheckComplete] = useState(false);
   const [driverData, setDriverData] = useState<any>(null);
   const [pollingIntervalId, setPollingIntervalId] = useState<NodeJS.Timeout | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [prevDriverLocation, setPrevDriverLocation] = useState<any>(null);
 
   const performCancellation = async () => {
     if (!rideDetails.rideId && !rideDetails.bookingId) {
@@ -563,7 +567,7 @@ export default function DriverSearchScreen() {
       if (rideData && rideData.drivers) {
         console.log('🚨 [DEBUG] Using driver data from ride query');
         console.log('✅ [DRIVER_SEARCH] Using driver data from ride query');
-        setDriverData({
+        const newDriverData = {
           id: rideData.drivers.id,
           name: rideData.drivers.users?.full_name || 'Driver',
           phone: rideData.drivers.users?.phone_number,
@@ -576,10 +580,12 @@ export default function DriverSearchScreen() {
             color: rideData.drivers.vehicles?.color || '',
             type: rideData.drivers.vehicles?.vehicle_type || '',
           },
-        });
-        setSearchStatus('found');
+        };
+        setDriverData(newDriverData);
+        setShowCelebration(true);
+        setSearchStatus('celebrating');
         setInitialCheckComplete(true);
-        console.log('🚨 [DEBUG] Driver data set, status changed to found');
+        console.log('🚨 [DEBUG] Driver data set, showing celebration animation');
         
         if (rideData.drivers.user_id) {
           startDriverLocationPolling(rideData.drivers.user_id);
@@ -619,7 +625,7 @@ export default function DriverSearchScreen() {
         vehicle: driverDetails.vehicles ? `${driverDetails.vehicles.make} ${driverDetails.vehicles.model}` : null
       });
       
-      setDriverData({
+      const newDriverData = {
         id: driverDetails.id,
         name: driverDetails.users?.full_name || 'Driver',
         phone: driverDetails.users?.phone_number,
@@ -632,10 +638,12 @@ export default function DriverSearchScreen() {
           color: driverDetails.vehicles?.color || '',
           type: driverDetails.vehicles?.vehicle_type || '',
         },
-      });
-      setSearchStatus('found');
+      };
+      setDriverData(newDriverData);
+      setShowCelebration(true);
+      setSearchStatus('celebrating');
       setInitialCheckComplete(true);
-      console.log('🚨 [DEBUG] Driver data set from edge function, status changed to found');
+      console.log('🚨 [DEBUG] Driver data set from edge function, showing celebration animation');
       
       if (driverDetails.user_id) {
         startDriverLocationPolling(driverDetails.user_id);
@@ -656,7 +664,7 @@ export default function DriverSearchScreen() {
         console.log('✅ [DRIVER_SEARCH] Using driver data from booking query (already joined)');
         const driverDetails = bookingData.drivers;
 
-        setDriverData({
+        const newDriverData = {
           id: driverDetails.id,
           name: driverDetails.users?.full_name || 'Driver',
           phone: driverDetails.users?.phone_number,
@@ -669,8 +677,10 @@ export default function DriverSearchScreen() {
             color: driverDetails.vehicles?.color || '',
             type: driverDetails.vehicles?.vehicle_type || '',
           },
-        });
-        setSearchStatus('found');
+        };
+        setDriverData(newDriverData);
+        setShowCelebration(true);
+        setSearchStatus('celebrating');
         setInitialCheckComplete(true);
 
         if (driverDetails.user_id) {
@@ -718,7 +728,7 @@ export default function DriverSearchScreen() {
       });
 
       // Process driver details and set state
-      setDriverData({
+      const newDriverData = {
         id: driverDetails.id,
         name: driverDetails.users?.full_name || 'Driver',
         phone: driverDetails.users?.phone_number,
@@ -731,11 +741,13 @@ export default function DriverSearchScreen() {
           color: driverDetails.vehicles?.color || '',
           type: driverDetails.vehicles?.vehicle_type || '',
         },
-      });
-      setSearchStatus('found');
+      };
+      setDriverData(newDriverData);
+      setShowCelebration(true);
+      setSearchStatus('celebrating');
       setInitialCheckComplete(true);
 
-      console.log('🚨 [DEBUG] Assigned driver data set, status changed to found');
+      console.log('🚨 [DEBUG] Assigned driver data set, showing celebration animation');
 
       if (driverDetails.user_id) {
         startDriverLocationPolling(driverDetails.user_id);
@@ -841,13 +853,24 @@ export default function DriverSearchScreen() {
               </View>
             )}
 
-            {searchStatus === 'found' && driverData && (
+            {(searchStatus === 'found' || searchStatus === 'celebrating') && driverData && (
               <View style={styles.foundContainer}>
                 <View style={styles.foundHeader}>
                   <CheckCircle size={32} color="#059669" />
                   <Text style={styles.foundTitle}>Driver Found!</Text>
                 </View>
-                
+
+                {eta && (
+                  <View style={styles.etaRingContainer}>
+                    <AnimatedETAProgressRing
+                      etaMinutes={eta}
+                      maxETA={15}
+                      size={140}
+                      strokeWidth={10}
+                    />
+                  </View>
+                )}
+
                 <View style={styles.driverCard}>
                   <View style={styles.driverHeader}>
                     <View style={styles.driverAvatar}>
@@ -883,14 +906,6 @@ export default function DriverSearchScreen() {
                     </View>
                   )}
 
-                  {eta && (
-                    <View style={styles.etaContainer}>
-                      <Clock size={16} color="#059669" />
-                      <Text style={styles.etaText}>
-                        Driver arriving in {eta} minutes
-                      </Text>
-                    </View>
-                  )}
                 </View>
               </View>
             )}
@@ -995,6 +1010,20 @@ export default function DriverSearchScreen() {
               </View>
             </View>
           </View>
+        )}
+
+        {/* Celebration Animation Overlay */}
+        {showCelebration && driverData && (
+          <DriverArrivingAnimation
+            visible={showCelebration}
+            driverName={driverData.name}
+            vehicleInfo={`${driverData.vehicle.make} ${driverData.vehicle.model}`}
+            eta={eta || 5}
+            onAnimationComplete={() => {
+              setShowCelebration(false);
+              setSearchStatus('found');
+            }}
+          />
         )}
       </LinearGradient>
     </SafeAreaView>
@@ -1108,6 +1137,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#059669',
     marginLeft: 12,
+  },
+  etaRingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 20,
   },
   driverCard: {
     backgroundColor: '#F9FAFB',
