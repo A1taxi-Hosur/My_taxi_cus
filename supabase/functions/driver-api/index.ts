@@ -245,81 +245,120 @@ async function notifyNearbyDrivers(req: Request, supabase: any) {
 
   // Filter drivers by vehicle type
   console.log('🔍 [DRIVER-API] ===== FILTERING DRIVERS BY VEHICLE TYPE =====');
-  console.log('🔍 [DRIVER-API] Required vehicle type:', ride.vehicle_type);
-  
-  // Define compatible vehicle types
-  const getCompatibleVehicleTypes = (requestedType) => {
-    const compatibilityMap = {
-      'hatchback': ['hatchback', 'hatchback_ac'], // Hatchback requests go to both hatchback and hatchback_ac
-      'hatchback_ac': ['hatchback_ac'], // Hatchback AC requests only go to hatchback_ac
-      'sedan': ['sedan', 'sedan_ac'], // Sedan requests go to both sedan and sedan_ac  
-      'sedan_ac': ['sedan_ac'], // Sedan AC requests only go to sedan_ac
-      'suv': ['suv', 'suv_ac'], // SUV requests go to both suv and suv_ac
-      'suv_ac': ['suv_ac'], // SUV AC requests only go to suv_ac
+  console.log('🔍 [DRIVER-API] Requested vehicle type from ride:', ride.vehicle_type);
+  console.log('🔍 [DRIVER-API] Vehicle type data type:', typeof ride.vehicle_type);
+  console.log('🔍 [DRIVER-API] Vehicle type length:', ride.vehicle_type?.length);
+  console.log('🔍 [DRIVER-API] Vehicle type trimmed:', ride.vehicle_type?.trim());
+
+  // Define compatible vehicle types - STRICT MATCHING
+  // Each vehicle type ONLY matches with itself and its AC variant
+  const getCompatibleVehicleTypes = (requestedType: string) => {
+    // Normalize the requested type
+    const normalizedType = requestedType?.trim().toLowerCase();
+
+    console.log('🎯 [DRIVER-API] Normalizing requested type:', {
+      original: requestedType,
+      normalized: normalizedType
+    });
+
+    const compatibilityMap: { [key: string]: string[] } = {
+      'hatchback': ['hatchback', 'hatchback_ac'],
+      'hatchback_ac': ['hatchback_ac'],
+      'sedan': ['sedan', 'sedan_ac'],
+      'sedan_ac': ['sedan_ac'],
+      'suv': ['suv', 'suv_ac'],
+      'suv_ac': ['suv_ac'],
+      'auto': ['auto'],
+      'bike': ['bike'],
     };
-    
-    return compatibilityMap[requestedType] || [requestedType];
+
+    const compatible = compatibilityMap[normalizedType] || [normalizedType];
+
+    console.log('🎯 [DRIVER-API] Compatibility lookup result:', {
+      requested: normalizedType,
+      compatible_types: compatible,
+      map_contains_key: normalizedType in compatibilityMap
+    });
+
+    return compatible;
   };
-  
+
   const compatibleTypes = getCompatibleVehicleTypes(ride.vehicle_type);
-  console.log('🔍 [DRIVER-API] Compatible vehicle types for', ride.vehicle_type, ':', compatibleTypes);
+  console.log('✅ [DRIVER-API] Compatible vehicle types determined:', compatibleTypes);
+  console.log('🔍 [DRIVER-API] Will filter', drivers?.length || 0, 'drivers to match these types');
   
   const filteredDrivers = drivers?.filter(driver => {
     const hasVehicle = !!driver.vehicles;
-    const vehicleType = driver.vehicles?.vehicle_type;
-    const isCompatibleType = compatibleTypes.includes(vehicleType);
-    
-    console.log(`🔍 [DRIVER-API] Checking driver ${driver.users?.full_name || driver.id}:`, {
+    const driverVehicleType = driver.vehicles?.vehicle_type;
+    const normalizedDriverVehicleType = driverVehicleType?.trim().toLowerCase();
+    const isCompatibleType = compatibleTypes.includes(normalizedDriverVehicleType);
+
+    console.log(`🔍 [DRIVER-API] Evaluating driver ${driver.users?.full_name || driver.id}:`, {
+      driver_id: driver.id,
+      driver_name: driver.users?.full_name,
       hasVehicle,
-      vehicleType,
-      requiredType: ride.vehicle_type,
-      compatibleTypes,
-      isCompatibleType,
-      willInclude: hasVehicle && isCompatibleType
+      driver_vehicle_type_raw: driverVehicleType,
+      driver_vehicle_type_normalized: normalizedDriverVehicleType,
+      requested_vehicle_type: ride.vehicle_type,
+      compatible_types_list: compatibleTypes,
+      is_in_compatible_list: isCompatibleType,
+      will_be_notified: hasVehicle && isCompatibleType
     });
-    
+
     if (!hasVehicle) {
-      console.log(`❌ [DRIVER-API] Driver ${driver.users?.full_name || driver.id} excluded: No vehicle data`);
+      console.log(`❌ [DRIVER-API] EXCLUDED - Driver ${driver.users?.full_name || driver.id}: No vehicle data`);
       return false;
     }
-    
+
     if (!isCompatibleType) {
-      console.log(`❌ [DRIVER-API] Driver ${driver.users?.full_name || driver.id} excluded: Vehicle type not compatible (${vehicleType} not in [${compatibleTypes.join(', ')}])`);
+      console.log(`❌ [DRIVER-API] EXCLUDED - Driver ${driver.users?.full_name || driver.id}: Vehicle type "${normalizedDriverVehicleType}" NOT in compatible list [${compatibleTypes.join(', ')}]`);
+      console.log(`❌ [DRIVER-API] REASON: Ride requested "${ride.vehicle_type}", driver has "${normalizedDriverVehicleType}" - NOT COMPATIBLE`);
       return false;
     }
-    
-    console.log(`✅ [DRIVER-API] Driver ${driver.users?.full_name || driver.id} included: Compatible vehicle type (${vehicleType})`);
+
+    console.log(`✅ [DRIVER-API] INCLUDED - Driver ${driver.users?.full_name || driver.id}: Vehicle type "${normalizedDriverVehicleType}" IS COMPATIBLE with request "${ride.vehicle_type}"`);
     return true;
   }) || [];
 
-  console.log('🔍 [DRIVER-API] ===== FILTERING RESULTS =====');
-  console.log(`📊 [DRIVER-API] Filtering summary:`, {
-    total_drivers_found: drivers?.length || 0,
-    drivers_with_compatible_vehicle: filteredDrivers.length,
-    required_vehicle_type: ride.vehicle_type,
-    compatible_vehicle_types: compatibleTypes,
+  console.log('🔍 [DRIVER-API] ===== FILTERING RESULTS SUMMARY =====');
+  console.log(`📊 [DRIVER-API] Final filtering statistics:`, {
+    total_drivers_queried: drivers?.length || 0,
+    drivers_that_passed_filter: filteredDrivers.length,
+    drivers_excluded: (drivers?.length || 0) - filteredDrivers.length,
+    requested_vehicle_type: ride.vehicle_type,
+    compatible_types_used: compatibleTypes,
     filter_success_rate: drivers?.length ? `${((filteredDrivers.length / drivers.length) * 100).toFixed(1)}%` : '0%'
   });
-  
+
+  console.log(`📊 [DRIVER-API] All drivers vehicle type breakdown:`);
+  const vehicleTypeBreakdown = drivers?.reduce((acc: any, d) => {
+    const vType = d.vehicles?.vehicle_type?.trim().toLowerCase() || 'unknown';
+    acc[vType] = (acc[vType] || 0) + 1;
+    return acc;
+  }, {});
+  console.log(`📊 [DRIVER-API] Vehicle types in database:`, vehicleTypeBreakdown);
+
   if (filteredDrivers.length > 0) {
-    console.log('✅ [DRIVER-API] Drivers with compatible vehicles:');
+    console.log('✅ [DRIVER-API] ===== DRIVERS THAT WILL RECEIVE NOTIFICATION =====');
     filteredDrivers.forEach((driver, index) => {
-      console.log(`✅ [DRIVER-API] Compatible Driver ${index + 1}:`, {
-        name: driver.users?.full_name,
+      console.log(`✅ [DRIVER-API] #${index + 1} - ${driver.users?.full_name}:`, {
+        driver_id: driver.id,
         vehicle: `${driver.vehicles?.make} ${driver.vehicles?.model}`,
         vehicle_type: driver.vehicles?.vehicle_type,
-        requested_type: ride.vehicle_type,
-        compatibility: `${driver.vehicles?.vehicle_type} is compatible with ${ride.vehicle_type}`,
         registration: driver.vehicles?.registration_number,
         rating: driver.rating,
+        phone: driver.users?.phone_number,
+        match_reason: `Vehicle "${driver.vehicles?.vehicle_type}" matches request "${ride.vehicle_type}"`
       });
     });
   } else {
-    console.log('❌ [DRIVER-API] No drivers passed the vehicle type filter');
-    console.log('❌ [DRIVER-API] Available vehicle types in database:');
-    const availableTypes = [...new Set(drivers?.map(d => d.vehicles?.vehicle_type).filter(Boolean))];
-    console.log('❌ [DRIVER-API] Available types:', availableTypes);
-    console.log('❌ [DRIVER-API] Requested type:', ride.vehicle_type, 'Compatible types:', compatibleTypes);
+    console.log('❌ [DRIVER-API] ===== NO COMPATIBLE DRIVERS FOUND =====');
+    console.log('❌ [DRIVER-API] Vehicle type mismatch details:');
+    console.log(`❌ [DRIVER-API] - Requested: "${ride.vehicle_type}"`);
+    console.log(`❌ [DRIVER-API] - Compatible types: [${compatibleTypes.join(', ')}]`);
+    const availableTypes = [...new Set(drivers?.map(d => d.vehicles?.vehicle_type?.trim().toLowerCase()).filter(Boolean))];
+    console.log(`❌ [DRIVER-API] - Available in DB: [${availableTypes.join(', ')}]`);
+    console.log(`❌ [DRIVER-API] - None of the available types match the compatible types list`);
   }
   
   if (filteredDrivers.length === 0) {
