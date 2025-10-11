@@ -56,45 +56,39 @@ export default function RidesScreen() {
 
     try {
       if (selectedRideForCancel.isScheduledBooking) {
-        // Handle scheduled booking cancellation
+        // Handle scheduled booking cancellation via edge function
         console.log('🚫 [RIDES] Cancelling scheduled booking:', selectedRideForCancel.id);
-        
-        const { data, error } = await supabase
-          .from('scheduled_bookings')
-          .update({
-            status: 'cancelled',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', selectedRideForCancel.id)
-          .eq('customer_id', user.id)
-          .select()
-          .maybeSingle();
-        
-        if (error) {
-          console.error('🚫 [RIDES] Scheduled booking cancellation failed:', error);
-          throw new Error('Failed to cancel booking. Please try again.');
+
+        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/cancel-booking`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            bookingId: selectedRideForCancel.id,
+            userId: user.id,
+            cancellationReason: 'Cancelled by customer'
+          }),
+        });
+
+        if (!response.ok) {
+          const result = await response.json();
+          console.error('🚫 [RIDES] Scheduled booking cancellation failed:', result.error);
+          throw new Error(result.error || 'Failed to cancel booking. Please try again.');
         }
-        
-        if (!data) {
-          console.warn('⚠️ [RIDES] No booking found to cancel (may already be cancelled)');
-          // Still proceed as the booking is effectively cancelled
+
+        const result = await response.json();
+
+        if (!result.success) {
+          console.error('🚫 [RIDES] Scheduled booking cancellation failed:', result.error);
+          throw new Error(result.error || 'Failed to cancel booking. Please try again.');
         }
-        
+
         console.log('🚫 [RIDES] ✅ Scheduled booking cancelled successfully');
-        
-        // If driver was assigned, free them up
-        if (selectedRideForCancel.driver_id || selectedRideForCancel.assigned_driver_id) {
-          const driverId = selectedRideForCancel.driver_id || selectedRideForCancel.assigned_driver_id;
-          console.log('🚫 [RIDES] Freeing up assigned driver:', driverId);
-          const { error: driverUpdateError } = await supabase
-            .from('drivers')
-            .update({ status: 'online' })
-            .eq('id', driverId);
-          
-          if (driverUpdateError) {
-            console.warn('⚠️ [RIDES] Warning: Could not update driver status (non-blocking):', driverUpdateError);
-          }
-        }
 
         // Send cancellation notification to customer for scheduled booking
         try {
@@ -109,14 +103,14 @@ export default function RidesScreen() {
       } else {
         // Handle regular ride cancellation
         console.log('🚫 [RIDES] Cancelling regular ride:', selectedRideForCancel.id);
-        
+
         const { data, error } = await rideService.cancelRide(selectedRideForCancel.id, user.id);
-        
+
         if (error) {
           console.error('🚫 [RIDES] Regular ride cancellation failed:', error);
           throw new Error('Failed to cancel ride. Please try again.');
         }
-        
+
         console.log('🚫 [RIDES] ✅ Regular ride cancelled successfully');
       }
 
@@ -158,6 +152,14 @@ export default function RidesScreen() {
         console.log('📡 [RIDES] Subscribing to booking updates:', ride.id);
         const statusSub = realtimeService.subscribeToBooking(ride.id, (updatedBooking) => {
           console.log('🔔 [RIDES] Booking update received:', updatedBooking);
+
+          // If booking is cancelled or completed, remove from active rides
+          if (updatedBooking.status === 'cancelled' || updatedBooking.status === 'completed') {
+            console.log('🔔 [RIDES] Removing ride from active list, status:', updatedBooking.status);
+            setActiveRides(prev => prev.filter(r => r.id !== updatedBooking.id));
+            return;
+          }
+
           // Update the ride in the activeRides array
           setActiveRides(prev => prev.map(r =>
             r.id === updatedBooking.id
@@ -180,6 +182,14 @@ export default function RidesScreen() {
         console.log('📡 [RIDES] Subscribing to ride updates:', ride.id);
         const statusSub = realtimeService.subscribeToRide(ride.id, (updatedRide) => {
           console.log('🔔 [RIDES] Ride update received:', updatedRide);
+
+          // If ride is cancelled or completed, remove from active rides
+          if (updatedRide.status === 'cancelled' || updatedRide.status === 'completed') {
+            console.log('🔔 [RIDES] Removing ride from active list, status:', updatedRide.status);
+            setActiveRides(prev => prev.filter(r => r.id !== updatedRide.id));
+            return;
+          }
+
           // Update the ride in the activeRides array
           setActiveRides(prev => prev.map(r =>
             r.id === updatedRide.id
