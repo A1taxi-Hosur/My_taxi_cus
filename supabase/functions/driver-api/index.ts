@@ -26,6 +26,10 @@ Deno.serve(async (req: Request) => {
       return await notifyNearbyDrivers(req, supabase);
     }
 
+    if (path === '/update-location' && req.method === 'POST') {
+      return await updateDriverLocation(req, supabase);
+    }
+
     return new Response(
       JSON.stringify({ error: 'Not found' }),
       {
@@ -505,8 +509,85 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
             Math.sin(dLon/2) * Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
+}
+
+async function updateDriverLocation(req: Request, supabase: any) {
+  const { driverId, latitude, longitude, heading, speed, accuracy } = await req.json();
+
+  console.log('📍 [DRIVER-LOCATION] Updating driver location:', {
+    driverId,
+    latitude,
+    longitude,
+    heading,
+    speed,
+    accuracy,
+  });
+
+  if (!driverId || !latitude || !longitude) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Missing required fields: driverId, latitude, longitude',
+      }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      }
+    );
+  }
+
+  const { data, error } = await supabase
+    .from('driver_locations')
+    .upsert({
+      driver_id: driverId,
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      heading: heading ? parseFloat(heading) : 0,
+      speed: speed ? parseFloat(speed) : 0,
+      accuracy: accuracy ? parseFloat(accuracy) : 0,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'driver_id'
+    })
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('❌ [DRIVER-LOCATION] Error updating location:', error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message,
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      }
+    );
+  }
+
+  console.log('✅ [DRIVER-LOCATION] Location updated successfully');
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      data,
+    }),
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    }
+  );
 }

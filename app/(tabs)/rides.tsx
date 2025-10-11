@@ -25,15 +25,28 @@ export default function RidesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [eta, setEta] = useState<number | null>(null);
 
+  const [driverLocation, setDriverLocation] = useState<any>(null);
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+
   const {
-    driverLocation,
-    isTracking,
-    error: trackingError,
-    lastUpdate
+    driverLocation: autoDriverLocation,
+    isTracking: autoIsTracking,
+    error: autoTrackingError,
   } = useDriverLocationTracking(
     selectedRide?.id || null,
     selectedRide?.driver_id || null
   );
+
+  useEffect(() => {
+    if (autoDriverLocation) {
+      setDriverLocation(autoDriverLocation);
+      setLastUpdate(new Date());
+    }
+    setIsTracking(autoIsTracking);
+    setTrackingError(autoTrackingError);
+  }, [autoDriverLocation, autoIsTracking, autoTrackingError]);
   const [cancelling, setCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedRideForCancel, setSelectedRideForCancel] = useState<any>(null);
@@ -155,12 +168,21 @@ export default function RidesScreen() {
   }, [user]);
 
   useEffect(() => {
-    if (activeRides.length > 0 && !selectedRide) {
+    if (activeRides.length > 0) {
+      const inProgressRide = activeRides.find(r => r.status === 'in_progress');
+
+      if (inProgressRide && (!selectedRide || selectedRide.id !== inProgressRide.id)) {
+        console.log('🎯 [RIDES] Auto-selecting IN_PROGRESS ride for live tracking:', inProgressRide.id);
+        setSelectedRide(inProgressRide);
+        return;
+      }
+
       const acceptedRide = activeRides.find(r =>
-        r.status === 'accepted' || r.status === 'assigned' || r.status === 'picked_up' || r.status === 'in_progress'
+        r.status === 'accepted' || r.status === 'assigned' || r.status === 'picked_up' || r.status === 'driver_arrived'
       );
-      if (acceptedRide) {
-        console.log('🎯 [RIDES] Setting selected ride for tracking:', acceptedRide.id);
+
+      if (acceptedRide && !selectedRide) {
+        console.log('🎯 [RIDES] Auto-selecting accepted ride for tracking:', acceptedRide.id);
         setSelectedRide(acceptedRide);
       }
     }
@@ -444,10 +466,12 @@ export default function RidesScreen() {
 
         <Text style={styles.statusSubtitle}>{statusInfo.subtitle}</Text>
 
-        {/* Live Tracking Map */}
-        {(ride.drivers || ride.assigned_driver) && driverLocation && selectedRide?.id === ride.id && (
+        {/* Live Tracking Map - Show for accepted, driver_arrived, and in_progress rides */}
+        {(ride.drivers || ride.assigned_driver) && driverLocation && selectedRide?.id === ride.id && ['accepted', 'driver_arrived', 'in_progress', 'picked_up'].includes(ride.status) && (
           <View style={styles.mapSection}>
-            <Text style={styles.sectionTitle}>Live Tracking</Text>
+            <Text style={styles.sectionTitle}>
+              {ride.status === 'in_progress' || ride.status === 'picked_up' ? '🚗 En Route to Destination' : '📍 Driver Location'}
+            </Text>
             <View style={styles.mapContainer}>
               <EnhancedGoogleMapView
                 initialRegion={{
@@ -460,10 +484,19 @@ export default function RidesScreen() {
                   latitude: ride.pickup_latitude,
                   longitude: ride.pickup_longitude,
                 }}
-                destinationCoords={{
-                  latitude: driverLocation.latitude,
-                  longitude: driverLocation.longitude,
-                }}
+                destinationCoords={
+                  ride.status === 'in_progress' || ride.status === 'picked_up'
+                    ? ride.destination_latitude && ride.destination_longitude
+                      ? {
+                          latitude: ride.destination_latitude,
+                          longitude: ride.destination_longitude,
+                        }
+                      : undefined
+                    : {
+                        latitude: ride.pickup_latitude,
+                        longitude: ride.pickup_longitude,
+                      }
+                }
                 driverLocation={{
                   latitude: driverLocation.latitude,
                   longitude: driverLocation.longitude,
