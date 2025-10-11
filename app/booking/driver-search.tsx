@@ -191,33 +191,75 @@ export default function DriverSearchScreen() {
 
   useEffect(() => {
     console.log('🚨 [DEBUG] useEffect for ride monitoring triggered');
-    
+
     console.log('🔔 [DRIVER_SEARCH] ===== SETTING UP RIDE MONITORING =====');
     console.log('🔔 [DRIVER_SEARCH] Platform:', Platform.OS);
     console.log('🔔 [DRIVER_SEARCH] Available IDs:', {
       rideId: rideDetails.rideId,
       bookingId: rideDetails.bookingId
     });
-    
+
     let pollingIntervalId: NodeJS.Timeout | null = null;
-    
-    if (rideDetails.rideId) {
-      if (Platform.OS === 'web') {
-        console.log('🌐 [DRIVER_SEARCH] Web platform - setting up polling for ride updates');
-        pollingIntervalId = setupRidePolling(rideDetails.rideId);
-      } else {
-        console.log('📱 [DRIVER_SEARCH] Mobile platform - setting up real-time subscription');
-        setupRideSubscription(rideDetails.rideId);
+
+    // Perform initial check for already assigned driver
+    const performInitialCheck = async () => {
+      if (rideDetails.bookingId) {
+        console.log('🔍 [DRIVER_SEARCH] Performing initial check for booking:', rideDetails.bookingId);
+        try {
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+          const response = await fetch(`${supabaseUrl}/functions/v1/get-booking-status?bookingId=${rideDetails.bookingId}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            const bookingData = result.data;
+
+            if (bookingData && bookingData.status === 'assigned' && bookingData.assigned_driver_id) {
+              console.log('✅ [DRIVER_SEARCH] Driver already assigned on initial check!');
+              await fetchAssignedDriverDetails(bookingData.assigned_driver_id, bookingData);
+              return true; // Driver found, no need to start polling
+            }
+          }
+        } catch (error) {
+          console.error('❌ [DRIVER_SEARCH] Initial check error:', error);
+        }
       }
-    } else if (rideDetails.bookingId) {
-      if (Platform.OS === 'web') {
-        console.log('🌐 [DRIVER_SEARCH] Web platform - setting up polling for booking updates');
-        pollingIntervalId = setupBookingPolling(rideDetails.bookingId);
-      } else {
-        console.log('📱 [DRIVER_SEARCH] Mobile platform - setting up booking subscription');
-        setupBookingSubscription(rideDetails.bookingId);
+      return false; // No driver found, need to start polling
+    };
+
+    // Start monitoring after initial check
+    performInitialCheck().then((driverFound) => {
+      if (driverFound) {
+        console.log('🔍 [DRIVER_SEARCH] Driver found on initial check, skipping polling setup');
+        return;
       }
-    }
+
+      // No driver found yet, start polling/subscription
+      if (rideDetails.rideId) {
+        if (Platform.OS === 'web') {
+          console.log('🌐 [DRIVER_SEARCH] Web platform - setting up polling for ride updates');
+          pollingIntervalId = setupRidePolling(rideDetails.rideId);
+        } else {
+          console.log('📱 [DRIVER_SEARCH] Mobile platform - setting up real-time subscription');
+          setupRideSubscription(rideDetails.rideId);
+        }
+      } else if (rideDetails.bookingId) {
+        if (Platform.OS === 'web') {
+          console.log('🌐 [DRIVER_SEARCH] Web platform - setting up polling for booking updates');
+          pollingIntervalId = setupBookingPolling(rideDetails.bookingId);
+        } else {
+          console.log('📱 [DRIVER_SEARCH] Mobile platform - setting up booking subscription');
+          setupBookingSubscription(rideDetails.bookingId);
+        }
+      }
+    });
 
     // Set timeout for no drivers found
     const timeoutId = setTimeout(() => {
@@ -354,48 +396,40 @@ export default function DriverSearchScreen() {
         // Check if Supabase is properly configured before making requests
         const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
         const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-        
-        if (!supabaseUrl || !supabaseKey || 
-            supabaseKey.includes('YourActualAnonKeyHere') || 
+
+        if (!supabaseUrl || !supabaseKey ||
+            supabaseKey.includes('YourActualAnonKeyHere') ||
             supabaseKey.includes('placeholder') ||
             supabaseUrl.includes('placeholder')) {
           console.warn('⚠️ [DRIVER_SEARCH] Supabase not properly configured, skipping booking polling');
           return;
         }
 
-        const { data: bookingData, error } = await supabase
-          .from('scheduled_bookings')
-          .select(`
-            *,
-            drivers:assigned_driver_id (
-              id,
-              user_id,
-              rating,
-              total_rides,
-              users:user_id (
-                full_name,
-                phone_number
-              ),
-              vehicles:vehicle_id (
-                make,
-                model,
-                registration_number,
-                color,
-                vehicle_type
-              )
-            )
-          `)
-          .eq('id', bookingId)
-          .maybeSingle();
+        // Use edge function to bypass RLS
+        const response = await fetch(`${supabaseUrl}/functions/v1/get-booking-status?bookingId=${bookingId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+        });
 
-        if (error) {
-          console.error('🚨 [DEBUG] Booking polling error:', error);
-          console.error('❌ [DRIVER_SEARCH] Booking polling error:', error);
-          
+        if (!response.ok) {
+          console.error('🚨 [DEBUG] Booking polling error:', response.status);
+          console.error('❌ [DRIVER_SEARCH] Booking polling error:', response.statusText);
+
           // If it's a network error, don't spam the console
-          if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+          if (response.status === 0 || response.status >= 500) {
             console.warn('⚠️ [DRIVER_SEARCH] Network error during polling, will retry...');
           }
+          return;
+        }
+
+        const result = await response.json();
+        const bookingData = result.data;
+
+        if (result.error) {
+          console.error('🚨 [DEBUG] Booking polling error:', result.error);
           return;
         }
 
