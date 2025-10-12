@@ -1,6 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { StyleSheet, Platform } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
+import { View, StyleSheet, Platform, Text } from 'react-native';
 
 interface EnhancedGoogleMapViewProps {
   initialRegion: {
@@ -37,28 +36,69 @@ interface EnhancedGoogleMapViewProps {
 }
 
 export default function EnhancedGoogleMapView(props: EnhancedGoogleMapViewProps) {
-  const mapRef = useRef<MapView>(null);
   const {
     initialRegion,
     pickupCoords,
     destinationCoords,
     driverLocation,
     availableDrivers,
-    showRoute,
     style,
-    showUserLocation = true,
-    followUserLocation = false,
-    routeCoordinates,
   } = props;
 
-  useEffect(() => {
-    if (mapRef.current && pickupCoords && destinationCoords) {
-      mapRef.current.fitToCoordinates([pickupCoords, destinationCoords], {
-        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-        animated: true,
-      });
-    }
-  }, [pickupCoords, destinationCoords]);
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[styles.webContainer, style]}>
+        <View style={styles.mapPlaceholder}>
+          <Text style={styles.title}>🗺️ Map View</Text>
+          <Text style={styles.subtitle}>Interactive map (native only)</Text>
+
+          {initialRegion && (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoText}>
+                📍 Center: {initialRegion.latitude.toFixed(4)}, {initialRegion.longitude.toFixed(4)}
+              </Text>
+            </View>
+          )}
+
+          {pickupCoords && (
+            <View style={styles.markerInfo}>
+              <Text style={styles.markerText}>
+                🟢 Pickup: {pickupCoords.latitude.toFixed(4)}, {pickupCoords.longitude.toFixed(4)}
+              </Text>
+            </View>
+          )}
+
+          {destinationCoords && (
+            <View style={styles.markerInfo}>
+              <Text style={styles.markerText}>
+                🔴 Destination: {destinationCoords.latitude.toFixed(4)}, {destinationCoords.longitude.toFixed(4)}
+              </Text>
+            </View>
+          )}
+
+          {driverLocation && (
+            <View style={styles.markerInfo}>
+              <Text style={styles.markerText}>
+                🚗 Driver: {driverLocation.latitude.toFixed(4)}, {driverLocation.longitude.toFixed(4)}
+              </Text>
+            </View>
+          )}
+
+          {availableDrivers && availableDrivers.length > 0 && (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoText}>
+                🚕 {availableDrivers.length} drivers nearby
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  const MapView = require('react-native-maps').default;
+  const { Marker, PROVIDER_GOOGLE, Polyline } = require('react-native-maps');
+  const mapRef = useRef<any>(null);
 
   return (
     <MapView
@@ -66,9 +106,9 @@ export default function EnhancedGoogleMapView(props: EnhancedGoogleMapViewProps)
       style={[styles.map, style]}
       provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
       initialRegion={initialRegion}
-      showsUserLocation={showUserLocation}
+      showsUserLocation={props.showUserLocation}
       showsMyLocationButton={true}
-      followsUserLocation={followUserLocation}
+      followsUserLocation={props.followUserLocation}
       showsCompass={true}
       showsScale={true}
     >
@@ -93,7 +133,6 @@ export default function EnhancedGoogleMapView(props: EnhancedGoogleMapViewProps)
           coordinate={driverLocation}
           title="Driver"
           pinColor="blue"
-          rotation={driverLocation.heading}
         />
       )}
 
@@ -106,13 +145,12 @@ export default function EnhancedGoogleMapView(props: EnhancedGoogleMapViewProps)
           }}
           title={`Driver - ${driver.vehicle_type || 'Unknown'}`}
           pinColor="blue"
-          rotation={driver.heading}
         />
       ))}
 
-      {showRoute && routeCoordinates && routeCoordinates.length > 0 && (
+      {props.showRoute && props.routeCoordinates && props.routeCoordinates.length > 0 && (
         <Polyline
-          coordinates={routeCoordinates}
+          coordinates={props.routeCoordinates}
           strokeColor="#4F46E5"
           strokeWidth={4}
         />
@@ -125,5 +163,56 @@ const styles = StyleSheet.create({
   map: {
     width: '100%',
     height: '100%',
+  },
+  webContainer: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E5E7EB',
+  },
+  mapPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 20,
+  },
+  infoBox: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    minWidth: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#374151',
+    textAlign: 'center',
+  },
+  markerInfo: {
+    backgroundColor: '#F3F4F6',
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 8,
+    minWidth: 250,
+  },
+  markerText: {
+    fontSize: 12,
+    color: '#1F2937',
+    textAlign: 'center',
   },
 });
