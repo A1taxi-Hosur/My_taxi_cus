@@ -515,16 +515,8 @@ export default function RentalBookingScreen() {
                         styles.packageKms,
                         isSelected && styles.selectedPackageText,
                       ]}>
-                        {pkg.freeKms}km free
+                        {pkg.freeKms}km
                       </Text>
-                      {pkg.baseFare && (
-                        <Text style={[
-                          styles.packageFare,
-                          isSelected && styles.selectedPackageText,
-                        ]}>
-                          ₹{pkg.baseFare}
-                        </Text>
-                      )}
                     </TouchableOpacity>
                   );
                 })}
