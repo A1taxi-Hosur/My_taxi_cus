@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View, Platform, Image } from 'react-native';
+import { Animated, StyleSheet, View, Platform } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { Car } from 'lucide-react-native';
 
 interface AnimatedDriverMarkerProps {
   latitude: number;
@@ -118,11 +119,7 @@ export default function AnimatedDriverMarker({
         ]}
       >
         <View style={styles.carImageContainer}>
-          <Image
-            source={require('../../assets/images/29309742.jpg')}
-            style={styles.carImage}
-            resizeMode="contain"
-          />
+          <Car color="#FFFFFF" size={32} strokeWidth={2} />
         </View>
       </Animated.View>
 
