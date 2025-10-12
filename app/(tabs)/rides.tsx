@@ -8,7 +8,6 @@ import { useRideTracking } from '../../src/hooks/useRideTracking';
 import EnhancedGoogleMapView from '../../src/components/EnhancedGoogleMapView';
 import { realtimeService } from '../../src/services/realtimeService';
 import { useDriverLocationTracking } from '../../src/hooks/useDriverLocationTracking';
-import LiveDriverTracking from '../../src/components/LiveDriverTracking';
 import { useRideNotifications } from '../../src/hooks/useRideNotifications';
 import { useRouter } from 'expo-router';
 import { CircleCheck as CheckCircle, CircleAlert as AlertCircle } from 'lucide-react-native';
@@ -507,27 +506,6 @@ export default function RidesScreen() {
                 showUserLocation={false}
                 followUserLocation={false}
               />
-
-              <View style={styles.liveTrackingOverlay}>
-                <LiveDriverTracking
-                  driverLocation={{
-                    latitude: driverLocation.latitude,
-                    longitude: driverLocation.longitude,
-                    heading: driverLocation.heading,
-                  }}
-                  pickupLocation={{
-                    latitude: ride.pickup_latitude,
-                    longitude: ride.pickup_longitude,
-                    address: ride.pickup_address,
-                  }}
-                  driverInfo={{
-                    name: (ride.drivers?.users?.full_name || ride.assigned_driver?.users?.full_name) || 'Driver',
-                    vehicle: `${(ride.drivers?.vehicles?.make || ride.assigned_driver?.vehicles?.make) || ''} ${(ride.drivers?.vehicles?.model || ride.assigned_driver?.vehicles?.model) || ''}`,
-                    plateNumber: (ride.drivers?.vehicles?.registration_number || ride.assigned_driver?.vehicles?.registration_number) || 'N/A',
-                    phone: (ride.drivers?.users?.phone_number || ride.assigned_driver?.users?.phone_number),
-                  }}
-                />
-              </View>
             </View>
             {isTracking && lastUpdate && (
               <Text style={styles.trackingInfo}>
@@ -980,12 +958,6 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
-  },
-  liveTrackingOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
   },
   trackingInfo: {
     fontSize: 12,
