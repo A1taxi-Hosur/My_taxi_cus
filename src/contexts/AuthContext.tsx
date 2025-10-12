@@ -44,22 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let subscription: any;
-    let timeoutId: NodeJS.Timeout;
 
     // Get initial session
     const initializeAuth = async () => {
       setLoading(true);
-
-      // Add timeout to prevent infinite loading
-      timeoutId = setTimeout(() => {
-        console.warn('⚠️ Auth initialization timeout - proceeding without auth');
-        if (mountedRef.current) {
-          setLoading(false);
-          setSession(null);
-          setUser(null);
-        }
-      }, 5000); // 5 second timeout
-
       try {
         // Always check Supabase session first to ensure we have a valid UUID
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -96,7 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (mountedRef.current) {
-        clearTimeout(timeoutId);
         setLoading(false);
       }
     };
@@ -122,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mountedRef.current = false;
-      clearTimeout(timeoutId);
       subscription?.unsubscribe();
     };
   }, []);
